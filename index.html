@@ -18,6 +18,11 @@
 body{font-family:Arial,Helvetica,sans-serif;background:var(--gray1);color:var(--txt);font-size:13px}
 button{font-family:inherit;cursor:pointer}
 .btn{padding:8px 14px;border:none;border-radius:6px;background:var(--teal);color:#fff;font-size:12px;font-weight:700}
+.btn-sec{background:#fff;color:var(--gray3);border:1px solid #CBD5E1}
+.btn-mini{padding:4px 8px;font-size:11px;border-radius:5px;border:1px solid #CBD5E1;background:#fff;color:var(--gray3);font-weight:600;margin-right:4px}
+.pin{width:90px;padding:5px 6px;border:1px solid #CBD5E1;border-radius:5px;font-size:12px;text-align:right}
+.pin.mudou{border-color:var(--teal);background:#ECFDF5;font-weight:700}
+.tag{display:inline-block;padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700;background:#F1F5F9;color:var(--gray3)}
 .btn:hover{filter:brightness(1.1)} .btn:disabled{opacity:.5;cursor:not-allowed}
 .btn-sm{padding:5px 10px;font-size:11px}
 .btn-ghost{background:#fff;color:var(--navy);border:1.5px solid var(--gray2)}
@@ -246,22 +251,61 @@ tfoot td{background:var(--navy);color:#fff;font-weight:700;border:none}
   <!-- ── CUSTOS ── -->
   <div class="page" id="p-custos">
     <div class="sec">
-      <h2>Custos de produção <span class="hint">com vigência: mudar o custo hoje não altera o mês passado</span></h2>
-      <div class="grid3">
-        <div><label>Componente</label><select id="c-comp">
-          <option value="producao_quadro">Produção do quadro</option>
-          <option value="moldura_quadro">Moldura (por quadro)</option>
-          <option value="embalagem_kit">Embalagem (por kit)</option></select></div>
-        <div><label>Tamanho</label><select id="c-tam">
-          <option>20x30</option><option>30x40</option><option>40x60</option></select></div>
-        <div><label>Valor R$</label><input type="number" step="0.0001" id="c-valor"></div>
-        <div><label>Vale a partir de</label><input type="date" id="c-vig"></div>
-        <div style="display:flex;align-items:end"><button class="btn" id="c-add">Cadastrar</button></div>
+      <h2>Preços vigentes dos insumos
+        <span class="hint">altere o valor na tabela e clique em Salvar — o preço antigo é encerrado, não apagado</span></h2>
+      <div class="grid3" style="margin-bottom:10px">
+        <div><label>As mudanças valem a partir de</label><input type="date" id="ins-vig"></div>
+        <div style="display:flex;align-items:end;gap:8px">
+          <button class="btn" id="ins-salvar">Salvar preços</button>
+          <button class="btn btn-sec" id="ins-desfazer">Desfazer</button>
+        </div>
+        <div style="display:flex;align-items:end">
+          <label style="display:flex;align-items:center;gap:6px;font-weight:600;color:var(--gray3)">
+            <input type="checkbox" id="ins-inativos"> mostrar insumos desativados</label>
+        </div>
       </div>
-      <div class="aviso aviso-i" style="margin-top:12px">Ao cadastrar um custo novo, o anterior é encerrado
-        no dia anterior automaticamente. O histórico continua correto.</div>
+      <div class="twrap"><table id="t-custos"></table></div>
+      <div class="aviso aviso-i" style="margin-top:12px">Um insumo <b>por quadro</b> é multiplicado pela
+        quantidade de quadros do kit. Um insumo <b>por kit</b> entra uma vez por unidade vendida.
+        A condição <b>com moldura</b> faz o insumo entrar só nos itens que têm moldura.</div>
     </div>
-    <div class="sec"><h2>Tabela vigente</h2><div class="twrap"><table id="t-custos"></table></div></div>
+
+    <div class="sec">
+      <h2>Cadastrar insumo novo <span class="hint">ex.: Fita gomada 0,30 · Grampos 0,20</span></h2>
+      <div class="grid3">
+        <div><label>Nome</label><input id="i-nome" placeholder="Fita gomada"></div>
+        <div><label>Grupo (opcional)</label><input id="i-grupo" placeholder="Embalagem"></div>
+        <div><label>Unidade</label><input id="i-unid" value="un"></div>
+        <div><label>Como entra no custo</label><select id="i-apl">
+          <option value="por_quadro">Por quadro do kit</option>
+          <option value="por_kit">Uma vez por kit vendido</option></select></div>
+        <div><label>Quando entra</label><select id="i-cond">
+          <option value="sempre">Sempre</option>
+          <option value="com_moldura">Só com moldura</option>
+          <option value="sem_moldura">Só sem moldura</option></select></div>
+        <div><label>O preço muda por tamanho?</label><select id="i-varia">
+          <option value="0">Não — preço único</option>
+          <option value="1">Sim — um preço por tamanho</option></select></div>
+      </div>
+      <div class="grid3" id="i-precos-unico" style="margin-top:4px">
+        <div><label>Preço R$</label><input type="number" step="0.0001" id="i-v-unico" placeholder="0,30"></div>
+      </div>
+      <div class="grid3" id="i-precos-tam" style="margin-top:4px;display:none">
+        <div><label>20x30 R$</label><input type="number" step="0.0001" id="i-v-20x30"></div>
+        <div><label>30x40 R$</label><input type="number" step="0.0001" id="i-v-30x40"></div>
+        <div><label>40x60 R$</label><input type="number" step="0.0001" id="i-v-40x60"></div>
+      </div>
+      <div class="grid3" style="margin-top:4px">
+        <div><label>Vale a partir de</label><input type="date" id="i-vig"></div>
+        <div style="display:flex;align-items:end"><button class="btn" id="i-add">Cadastrar insumo</button></div>
+      </div>
+    </div>
+
+    <div class="sec" id="sec-hist" style="display:none">
+      <h2>Histórico de preços — <span id="hist-nome"></span>
+        <button class="btn btn-sec" style="float:right" onclick="document.getElementById('sec-hist').style.display='none'">Fechar</button></h2>
+      <div class="twrap"><table id="t-hist"></table></div>
+    </div>
     <div class="sec">
       <h2>Simulador de custo de kit</h2>
       <div class="grid3">
@@ -354,7 +398,7 @@ const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov'
 const ANO_HISTORICO = 2026;   // o app antigo guarda só o nome do mês
 
 let cache = { lojas:[], empresas:[], categorias:[], vendas:[], dre:[], margem:[],
-              despesas:[], custos:[], top:[], abc:[], mixTam:[], mixMold:[], mixTipo:[], uf:[] };
+              despesas:[], insumos:[], top:[], abc:[], mixTam:[], mixMold:[], mixTipo:[], uf:[] };
 let filtro = { loja:'', de:'', ate:'' };
 let charts = {};
 
@@ -496,12 +540,12 @@ async function recarregar(){
     sb.rpc('ec_margem_periodo', {p_de: filtro.de, p_ate: filtro.ate,
                                  p_loja: filtro.loja ? Number(filtro.loja) : null}),
     per(sb.from('ec_despesas').select('*,ec_categorias(nome,natureza),ec_lojas(nome)')).order('competencia'),
-    sb.from('ec_custos_unitarios').select('*').order('componente').order('tamanho'),
+    sb.rpc('ec_insumos_lista', {p_ref: filtro.ate || null}),
   ]);
-  for (const [nome,r] of [['vendas',v],['DRE',d],['margem',m],['despesas',dp],['custos',cu]])
+  for (const [nome,r] of [['vendas',v],['DRE',d],['margem',m],['despesas',dp],['insumos',cu]])
     if (r.error) toast(`Erro ao ler ${nome}: ${r.error.message}`,'er');
   cache.vendas=v.data||[]; cache.dre=d.data||[]; cache.margem=m.data||[];
-  cache.despesas=dp.data||[]; cache.custos=cu.data||[];
+  cache.despesas=dp.data||[]; cache.insumos=cu.data||[];
 
   // Relatórios de produto, mix e estado — todos agregados pelo servidor.
   const arg = {p_de: filtro.de, p_ate: filtro.ate,
@@ -907,65 +951,197 @@ async function apagarDespesa(id){
   toast('Despesa apagada.','ok'); recarregar();
 }
 
-// ── CUSTOS ─────────────────────────────────────────────────────
-document.getElementById('c-add').onclick = async ()=>{
-  const comp = document.getElementById('c-comp').value;
-  const tam  = document.getElementById('c-tam').value;
-  const val  = parseFloat(document.getElementById('c-valor').value);
-  const vig  = document.getElementById('c-vig').value;
-  if (!val || !vig) return toast('Preencha valor e data de vigência.','er');
-  const fim = new Date(vig); fim.setDate(fim.getDate()-1);
-  await sb.from('ec_custos_unitarios')
-    .update({ vigencia_fim: fim.toISOString().slice(0,10) })
-    .eq('componente',comp).eq('tamanho',tam).is('vigencia_fim',null);
-  const { error } = await sb.from('ec_custos_unitarios')
-    .insert({ componente:comp, tamanho:tam, valor:val, vigencia_inicio:vig });
-  if (error) return toast('Erro: '+error.message,'er');
-  document.getElementById('c-valor').value='';
-  toast('Custo cadastrado. O anterior foi encerrado na véspera.','ok'); recarregar();
+// ── CUSTOS DE PRODUÇÃO / INSUMOS ───────────────────────────────
+const TAMANHOS  = ['20x30','30x40','40x60'];
+const NOME_APL  = {por_quadro:'por quadro', por_kit:'por kit'};
+const NOME_COND = {sempre:'sempre', com_moldura:'só com moldura', sem_moldura:'só sem moldura'};
+
+const primeiroDoMes = () => { const d=new Date(); return new Date(Date.UTC(d.getFullYear(),d.getMonth(),1))
+                                                    .toISOString().slice(0,10); };
+document.getElementById('ins-vig').value = primeiroDoMes();
+document.getElementById('i-vig').value   = primeiroDoMes();
+
+// preço vigente de um insumo para um tamanho (null = não cadastrado)
+function precoDe(ins, tam){
+  const alvo = ins.varia_por_tamanho ? tam : null;
+  const p = (ins.precos||[]).find(x => (x.tamanho||null) === alvo);
+  return p ? Number(p.valor) : null;
+}
+
+document.getElementById('i-varia').onchange = e => {
+  const porTam = e.target.value === '1';
+  document.getElementById('i-precos-tam').style.display   = porTam ? '' : 'none';
+  document.getElementById('i-precos-unico').style.display = porTam ? 'none' : '';
+};
+document.getElementById('ins-inativos').onchange = renderCustos;
+document.getElementById('ins-desfazer').onclick  = renderCustos;
+
+// ── cadastrar insumo novo ──
+document.getElementById('i-add').onclick = async ()=>{
+  const nome  = document.getElementById('i-nome').value.trim();
+  const vig   = document.getElementById('i-vig').value;
+  const varia = document.getElementById('i-varia').value === '1';
+  if (!nome) return toast('Dê um nome ao insumo.','er');
+  if (!vig)  return toast('Informe a partir de quando o preço vale.','er');
+
+  const precos = varia
+    ? TAMANHOS.map(t => ({tamanho:t, valor:parseFloat(document.getElementById('i-v-'+t).value)}))
+              .filter(x => !isNaN(x.valor))
+    : [{tamanho:null, valor:parseFloat(document.getElementById('i-v-unico').value)}]
+              .filter(x => !isNaN(x.valor));
+  if (!precos.length) return toast('Informe pelo menos um preço.','er');
+
+  const { data, error } = await sb.from('ec_insumos').insert({
+    nome, grupo: document.getElementById('i-grupo').value.trim() || null,
+    unidade:   document.getElementById('i-unid').value.trim() || 'un',
+    aplicacao: document.getElementById('i-apl').value,
+    condicao:  document.getElementById('i-cond').value,
+    varia_por_tamanho: varia,
+  }).select();
+  if (error) return toast(error.message.includes('ec_insumos_nome_uk')
+      ? 'Já existe um insumo com esse nome.' : 'Erro: '+error.message, 'er');
+
+  const id = data[0].id;
+  for (const p of precos){
+    const { error: e2 } = await sb.rpc('ec_insumo_set_preco',
+      {p_insumo_id:id, p_tamanho:p.tamanho, p_valor:p.valor, p_vigencia:vig});
+    if (e2) return toast('Erro ao gravar preço: '+e2.message,'er');
+  }
+  ['i-nome','i-grupo','i-v-unico','i-v-20x30','i-v-30x40','i-v-40x60']
+    .forEach(x=>document.getElementById(x).value='');
+  toast(`Insumo "${nome}" cadastrado.`,'ok');
+  recarregar();
 };
 
-const NOME_COMP = {producao_quadro:'Produção do quadro', moldura_quadro:'Moldura (por quadro)',
-                   embalagem_kit:'Embalagem (por kit)'};
+// ── tabela de preços vigentes ──
 function renderCustos(){
-  const c = cache.custos;
-  document.getElementById('t-custos').innerHTML = c.length ? `
-    <thead><tr><th>Componente</th><th>Tamanho</th><th class="num">Valor</th>
-      <th>Vale de</th><th>Até</th><th>Situação</th></tr></thead>
-    <tbody>${c.map(r=>`<tr>
-      <td>${NOME_COMP[r.componente]||r.componente}</td><td>${r.tamanho}</td>
-      <td class="num">${R(r.valor)}</td><td>${r.vigencia_inicio.split('-').reverse().join('/')}</td>
-      <td>${r.vigencia_fim? r.vigencia_fim.split('-').reverse().join('/') : '—'}</td>
-      <td>${r.vigencia_fim?'<span style="color:var(--gray3)">encerrado</span>'
-                          :'<span class="pos">vigente</span>'}</td></tr>`).join('')}</tbody>`
-    : '<tbody><tr><td class="vazio">Sem custos cadastrados</td></tr></tbody>';
+  const verInativos = document.getElementById('ins-inativos').checked;
+  const lista = (cache.insumos||[]).filter(i => verInativos || i.ativo);
+  const el = document.getElementById('t-custos');
+  if (!lista.length){
+    el.innerHTML = '<tbody><tr><td class="vazio">Nenhum insumo cadastrado. Use o formulário abaixo.</td></tr></tbody>';
+    simular(); return;
+  }
+  el.innerHTML = `
+    <thead><tr><th>Insumo</th><th>Grupo</th><th>Como entra</th><th>Quando</th>
+      ${TAMANHOS.map(t=>`<th class="num">${t}</th>`).join('')}<th></th></tr></thead>
+    <tbody>${lista.map(i=>{
+      const cel = i.varia_por_tamanho
+        ? TAMANHOS.map(t=>{
+            const v = precoDe(i,t);
+            return `<td class="num"><input class="pin" type="number" step="0.0001"
+                      data-ins="${i.id}" data-tam="${t}" data-orig="${v==null?'':v}"
+                      value="${v==null?'':v}"></td>`; }).join('')
+        : `<td class="num" colspan="3"><input class="pin" type="number" step="0.0001"
+             data-ins="${i.id}" data-tam="" data-orig="${precoDe(i,null)??''}"
+             value="${precoDe(i,null)??''}"> <span class="hint">preço único</span></td>`;
+      return `<tr${i.ativo?'':' style="opacity:.5"'}>
+        <td><b>${i.nome}</b>${i.ativo?'':' <span class="tag">desativado</span>'}
+            <div class="hint">${i.unidade}</div></td>
+        <td>${i.grupo||'—'}</td>
+        <td><span class="tag">${NOME_APL[i.aplicacao]}</span></td>
+        <td><span class="tag">${NOME_COND[i.condicao]}</span></td>
+        ${cel}
+        <td style="white-space:nowrap">
+          <button class="btn-mini" onclick="verHistorico(${i.id})">Histórico</button>
+          <button class="btn-mini" onclick="alternarInsumo(${i.id},${!i.ativo})">${i.ativo?'Desativar':'Ativar'}</button>
+          <button class="btn-mini" onclick="apagarInsumo(${i.id})">Excluir</button>
+        </td></tr>`;
+    }).join('')}</tbody>`;
+  el.querySelectorAll('.pin').forEach(inp => inp.oninput = () =>
+    inp.classList.toggle('mudou', String(inp.value) !== String(inp.dataset.orig)));
   simular();
 }
 
+// ── salvar as alterações de preço ──
+document.getElementById('ins-salvar').onclick = async ()=>{
+  const vig = document.getElementById('ins-vig').value;
+  if (!vig) return toast('Informe a partir de quando os preços novos valem.','er');
+  const mudados = [...document.querySelectorAll('#t-custos .pin')]
+    .filter(i => String(i.value) !== String(i.dataset.orig) && i.value !== '');
+  if (!mudados.length) return toast('Nenhum preço foi alterado.','er');
+
+  for (const inp of mudados){
+    const { error } = await sb.rpc('ec_insumo_set_preco', {
+      p_insumo_id: Number(inp.dataset.ins),
+      p_tamanho:   inp.dataset.tam || null,
+      p_valor:     parseFloat(inp.value),
+      p_vigencia:  vig });
+    if (error) return toast('Erro ao gravar: '+error.message,'er');
+  }
+  toast(`${mudados.length} preço(s) atualizado(s) a partir de ${vig.split('-').reverse().join('/')}.`,'ok');
+  recarregar();
+};
+
+async function alternarInsumo(id, ativo){
+  const { error } = await sb.from('ec_insumos').update({ativo}).eq('id',id);
+  if (error) return toast('Erro: '+error.message,'er');
+  toast(ativo?'Insumo reativado.':'Insumo desativado — deixa de entrar no custo.','ok');
+  recarregar();
+}
+
+async function apagarInsumo(id){
+  const ins = (cache.insumos||[]).find(x=>x.id===id);
+  if (!confirm(`Excluir "${ins?ins.nome:id}" e todo o histórico de preços dele?\n\n`+
+               'Isso recalcula o custo de todos os meses. Se quiser só parar de usar daqui '+
+               'para frente, use Desativar.')) return;
+  const { error } = await sb.from('ec_insumos').delete().eq('id',id);
+  if (error) return toast('Erro: '+error.message,'er');
+  toast('Insumo excluído.','ok'); recarregar();
+}
+
+async function verHistorico(id){
+  const ins = (cache.insumos||[]).find(x=>x.id===id);
+  const { data, error } = await sb.rpc('ec_insumo_historico', {p_insumo_id:id});
+  if (error) return toast('Erro: '+error.message,'er');
+  document.getElementById('hist-nome').textContent = ins ? ins.nome : '';
+  const dt = s => s ? s.split('-').reverse().join('/') : '—';
+  document.getElementById('t-hist').innerHTML = (data||[]).length ? `
+    <thead><tr><th>Tamanho</th><th class="num">Valor</th><th>Vale de</th><th>Até</th><th>Situação</th></tr></thead>
+    <tbody>${data.map(r=>`<tr>
+      <td>${r.tamanho||'todos'}</td><td class="num">${R(r.valor)}</td>
+      <td>${dt(r.vigencia_inicio)}</td><td>${dt(r.vigencia_fim)}</td>
+      <td>${r.vigencia_fim?'<span style="color:var(--gray3)">encerrado</span>'
+                          :'<span class="pos">vigente</span>'}</td></tr>`).join('')}</tbody>`
+    : '<tbody><tr><td class="vazio">Sem preços cadastrados</td></tr></tbody>';
+  const sec = document.getElementById('sec-hist');
+  sec.style.display=''; sec.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+// ── simulador de custo de kit ──
 ['s-tam','s-qtd','s-mold','s-preco'].forEach(id=>
   document.getElementById(id).addEventListener('input', simular));
+
 function simular(){
-  const tam = document.getElementById('s-tam').value;
-  const q   = parseInt(document.getElementById('s-qtd').value)||1;
-  const mold= document.getElementById('s-mold').value==='1';
-  const pr  = parseFloat(document.getElementById('s-preco').value)||0;
-  const vig = comp => { const r = cache.custos.find(x=>x.componente===comp && x.tamanho===tam && !x.vigencia_fim);
-                        return r? Number(r.valor) : null; };
-  const cp = vig('producao_quadro'), cm = vig('moldura_quadro'), ce = vig('embalagem_kit');
-  const out = document.getElementById('s-out');
-  if (cp==null || ce==null){ out.innerHTML =
-    '<div class="aviso aviso-w">Faltam custos vigentes para o tamanho '+tam+'.</div>'; return; }
-  const custo = q*(cp + (mold? (cm||0) : 0)) + ce;
+  const tam  = document.getElementById('s-tam').value;
+  const q    = parseInt(document.getElementById('s-qtd').value)||1;
+  const mold = document.getElementById('s-mold').value==='1';
+  const pr   = parseFloat(document.getElementById('s-preco').value)||0;
+  const out  = document.getElementById('s-out');
+
+  const usados = (cache.insumos||[]).filter(i => i.ativo
+    && !(i.condicao==='com_moldura' && !mold)
+    && !(i.condicao==='sem_moldura' &&  mold));
+  const linhas = [], faltando = [];
+  let custo = 0;
+  for (const i of usados){
+    const v = precoDe(i, tam);
+    if (v==null){ faltando.push(i.nome); continue; }
+    const mult = i.aplicacao==='por_quadro' ? q : 1;
+    custo += mult*v;
+    linhas.push({nome:i.nome, det: mult>1 ? `${mult} × ${R(v)}` : R(v), tot: mult*v});
+  }
+  if (!linhas.length){ out.innerHTML =
+    `<div class="aviso aviso-w">Nenhum insumo com preço cadastrado para o tamanho ${tam}.</div>`; return; }
+
   // comissão Shopee 2026: 14% + taxa fixa por faixa
   const fixa = pr<80?4 : pr<100?16 : pr<200?20 : 26;
   const com  = pr*0.14 + fixa;
-  const mc = pr - custo - com;
+  const mc   = pr - custo - com;
   out.innerHTML = `
     <div class="twrap"><table>
       <tbody>
-        <tr><td>Produção · ${q} × ${R(cp)}</td><td class="num">${R(q*cp)}</td></tr>
-        <tr><td>Moldura · ${mold? q+' × '+R(cm||0) : 'sem moldura'}</td><td class="num">${R(mold? q*(cm||0):0)}</td></tr>
-        <tr><td>Embalagem</td><td class="num">${R(ce)}</td></tr>
+        ${linhas.map(l=>`<tr><td>${l.nome} · ${l.det}</td><td class="num">${R(l.tot)}</td></tr>`).join('')}
         <tr style="background:#F1F5F9;font-weight:700"><td>Custo do kit</td><td class="num">${R(custo)}</td></tr>
         <tr><td>Comissão Shopee estimada (14% + R$ ${fixa} fixos)</td><td class="num">${R(com)}</td></tr>
         <tr style="background:var(--kpi);font-weight:700"><td>Margem de contribuição</td>
@@ -975,6 +1151,7 @@ function simular(){
         <tr><td><b>ROAS de equilíbrio</b> — abaixo disso o anúncio dá prejuízo</td>
             <td class="num"><b>${mc>0? X(pr/mc) : '—'}</b></td></tr>
       </tbody></table></div>
+    ${faltando.length ? `<div class="aviso aviso-w" style="margin-top:10px">Sem preço para ${tam}, ficaram de fora: ${faltando.join(', ')}.</div>` : ''}
     <div class="aviso aviso-i" style="margin-top:10px">A comissão é estimada pela tabela da Shopee de 2026
       e não considera imposto nem despesa fixa. O ROAS de equilíbrio sai do preço dividido pela margem.</div>`;
 }
