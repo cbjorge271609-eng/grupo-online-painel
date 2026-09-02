@@ -123,6 +123,10 @@ tfoot td{background:var(--navy);color:#fff;font-weight:700;border:none}
 <nav>
   <button data-p="dash" class="on">Visão geral</button>
   <button data-p="mensal">Mensal</button>
+  <button data-p="top">Top Produtos</button>
+  <button data-p="abc">Curva ABC</button>
+  <button data-p="mix">Mix de Vendas</button>
+  <button data-p="uf">Estados</button>
   <button data-p="dre">DRE e EBITDA</button>
   <button data-p="margem">Margem e markup</button>
   <button data-p="despesas">Despesas</button>
@@ -162,6 +166,41 @@ tfoot td{background:var(--navy);color:#fff;font-weight:700;border:none}
         A tabela acima passa a apontar qualquer diferença no mês em que ela aparecer.</div>
       <div id="conf-form"></div>
     </div>
+  </div>
+
+  <!-- ── TOP PRODUTOS ── -->
+  <div class="page" id="p-top">
+    <div class="sec"><h2>Resumo <span class="hint" id="top-info"></span></h2>
+      <div class="kpis" id="k-top"></div></div>
+    <div class="sec">
+      <h2>Produtos por receita</h2>
+      <div class="twrap"><table id="t-top"></table></div>
+    </div>
+  </div>
+
+  <!-- ── CURVA ABC ── -->
+  <div class="page" id="p-abc">
+    <div class="sec">
+      <h2>Classificação ABC <span class="hint">A = até 80% da receita · B = até 95% · C = o resto</span></h2>
+      <div class="kpis" id="k-abc"></div>
+    </div>
+    <div class="sec">
+      <h2>Produtos em ordem de receita</h2>
+      <div class="twrap"><table id="t-abc"></table></div>
+    </div>
+  </div>
+
+  <!-- ── MIX DE VENDAS ── -->
+  <div class="page" id="p-mix">
+    <div class="sec"><h2>Por tamanho</h2><div class="twrap"><table id="t-mix-tam"></table></div></div>
+    <div class="sec"><h2>Por acabamento</h2><div class="twrap"><table id="t-mix-mold"></table></div></div>
+    <div class="sec"><h2>Por tipo de produto</h2><div class="twrap"><table id="t-mix-tipo"></table></div></div>
+  </div>
+
+  <!-- ── ESTADOS ── -->
+  <div class="page" id="p-uf">
+    <div class="sec"><h2>Vendas por estado <span class="hint" id="uf-info"></span></h2>
+      <div class="twrap"><table id="t-uf"></table></div></div>
   </div>
 
   <!-- ── DRE ── -->
@@ -314,7 +353,8 @@ const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
 const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const ANO_HISTORICO = 2026;   // o app antigo guarda só o nome do mês
 
-let cache = { lojas:[], empresas:[], categorias:[], vendas:[], dre:[], margem:[], despesas:[], custos:[] };
+let cache = { lojas:[], empresas:[], categorias:[], vendas:[], dre:[], margem:[],
+              despesas:[], custos:[], top:[], abc:[], mixTam:[], mixMold:[], mixTipo:[], uf:[] };
 let filtro = { loja:'', de:'', ate:'' };
 let charts = {};
 
@@ -462,6 +502,24 @@ async function recarregar(){
     if (r.error) toast(`Erro ao ler ${nome}: ${r.error.message}`,'er');
   cache.vendas=v.data||[]; cache.dre=d.data||[]; cache.margem=m.data||[];
   cache.despesas=dp.data||[]; cache.custos=cu.data||[];
+
+  // Relatórios de produto, mix e estado — todos agregados pelo servidor.
+  const arg = {p_de: filtro.de, p_ate: filtro.ate,
+               p_loja: filtro.loja ? Number(filtro.loja) : null};
+  const [tp,ab,mt,mm,mtp,uf] = await Promise.all([
+    sb.rpc('ec_top_produtos', arg),
+    sb.rpc('ec_curva_abc', arg),
+    sb.rpc('ec_mix_vendas', {...arg, p_dim:'tamanho'}),
+    sb.rpc('ec_mix_vendas', {...arg, p_dim:'acabamento'}),
+    sb.rpc('ec_mix_vendas', {...arg, p_dim:'tipo'}),
+    sb.rpc('ec_vendas_uf', arg),
+  ]);
+  for (const [nome,r] of [['top produtos',tp],['curva ABC',ab],['mix tamanho',mt],
+                          ['mix acabamento',mm],['mix tipo',mtp],['estados',uf]])
+    if (r.error) toast(`Erro em ${nome}: ${r.error.message}`,'er');
+  cache.top=tp.data||[]; cache.abc=ab.data||[];
+  cache.mixTam=mt.data||[]; cache.mixMold=mm.data||[]; cache.mixTipo=mtp.data||[];
+  cache.uf=uf.data||[];
   document.getElementById('f-info').textContent =
     `${cache.vendas.length} linhas · ${compLabel(filtro.de)} a ${compLabel(filtro.ate)}`;
   renderTudo();
@@ -479,6 +537,7 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
 
 function renderTudo(){
   renderDash(); renderMensal(); renderDRE(); renderMargem();
+  renderTop(); renderABC(); renderMix(); renderUF();
   renderDespesas(); renderCustos(); renderImpostos(); renderConf();
 }
 
@@ -682,6 +741,130 @@ function renderMargem(){
     ? `${arr.length} produtos · markup = preço ÷ custo de produção`
       + (arr.length >= 300 ? ' · mostrando os 300 de maior receita' : '')
     : 'markup = preço ÷ custo de produção';
+}
+
+// ── TOP PRODUTOS ───────────────────────────────────────────────
+function renderTop(){
+  const t = cache.top;
+  const rec = soma(t,'receita'), un = soma(t,'unidades'), ped = soma(t,'pedidos');
+  const liq = soma(t,'liquido'), cus = soma(t,'custo');
+  document.getElementById('k-top').innerHTML = [
+    ['Produtos vendidos', N(t.length), 'títulos distintos',''],
+    ['Unidades', N(un), 'kits e peças',''],
+    ['Receita', R(rec), 'no período',''],
+    ['Ticket médio', R(ped? rec/ped : 0), 'por pedido',''],
+    ['Custo de produção', R(cus), rec? P(cus/rec*100)+' da receita':'',''],
+    ['Líquido', R(liq), rec? P(liq/rec*100)+' da receita':'', liq>=0?'g':'r'],
+  ].map(([l,v,s,c])=>`<div class="kpi ${c}"><div class="lb">${l}</div><div class="vl">${v}</div><div class="sb">${s}</div></div>`).join('');
+  document.getElementById('top-info').textContent =
+    t.length>=500 ? 'mostrando os 500 de maior receita' : '';
+
+  document.getElementById('t-top').innerHTML = t.length ? `
+    <thead><tr><th>#</th><th>Produto</th><th>Tipo</th><th class="num">Pedidos</th>
+      <th class="num">Un.</th><th class="num">Receita</th><th class="num">% receita</th>
+      <th class="num">Comissão</th><th class="num">Taxa serv.</th><th class="num">Custo</th>
+      <th class="num">Líquido</th><th class="num">Ticket</th>
+      <th class="num">20x30</th><th class="num">30x40</th><th class="num">40x60</th>
+      <th class="num">Branca</th><th class="num">Madeira</th><th class="num">Preta</th><th class="num">S/ mold.</th></tr></thead>
+    <tbody>${t.map((r,i)=>`<tr>
+      <td>${i+1}</td><td style="max-width:330px">${r.produto_nome}</td><td>${r.tipo||'—'}</td>
+      <td class="num">${N(r.pedidos)}</td><td class="num">${N(r.unidades)}</td>
+      <td class="num">${R(r.receita)}</td><td class="num">${rec?P(r.receita/rec*100):'—'}</td>
+      <td class="num">${R(r.comissao)}</td><td class="num">${R(r.taxa_servico)}</td>
+      <td class="num">${r.custo?R(r.custo):'<span style="color:var(--yellow)">—</span>'}</td>
+      <td class="num ${Number(r.liquido)>=0?'pos':'neg'}">${R(r.liquido)}</td>
+      <td class="num">${R(r.ticket_medio)}</td>
+      <td class="num">${N(r.qtd_20x30||0)}</td><td class="num">${N(r.qtd_30x40||0)}</td>
+      <td class="num">${N(r.qtd_40x60||0)}</td>
+      <td class="num">${N(r.mold_branca||0)}</td><td class="num">${N(r.mold_madeira||0)}</td>
+      <td class="num">${N(r.mold_preta||0)}</td><td class="num">${N(r.sem_moldura||0)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="3">TOTAL</td><td class="num">${N(ped)}</td><td class="num">${N(un)}</td>
+      <td class="num">${R(rec)}</td><td class="num">100,0%</td>
+      <td class="num">${R(soma(t,'comissao'))}</td><td class="num">${R(soma(t,'taxa_servico'))}</td>
+      <td class="num">${R(cus)}</td><td class="num">${R(liq)}</td><td colspan="8"></td></tr></tfoot>`
+    : '<tbody><tr><td class="vazio">Sem dados no período</td></tr></tbody>';
+}
+
+// ── CURVA ABC ──────────────────────────────────────────────────
+function renderABC(){
+  const a = cache.abc;
+  const cls = k => a.filter(r=>r.classe===k);
+  const rec = soma(a,'receita');
+  document.getElementById('k-abc').innerHTML = ['A','B','C'].map(k=>{
+    const g = cls(k), r = soma(g,'receita');
+    const cor = k==='A'?'g':k==='C'?'r':'';
+    const legenda = k==='A' ? 'carregam o faturamento'
+                  : k==='B' ? 'complementam' : 'cauda longa';
+    return `<div class="kpi ${cor}"><div class="lb">Classe ${k}</div>
+      <div class="vl">${N(g.length)}</div>
+      <div class="sb">${R(r)} · ${rec?P(r/rec*100):'—'} da receita · ${legenda}</div></div>`;
+  }).join('') + `<div class="kpi"><div class="lb">Total</div><div class="vl">${N(a.length)}</div>
+      <div class="sb">${R(rec)}</div></div>`;
+
+  const cor = c => c==='A'?'background:#E1F2DE;color:#166534'
+                 : c==='B'?'background:#FEF3C7;color:#92400E'
+                 : 'background:#FEE2E2;color:#991B1B';
+  document.getElementById('t-abc').innerHTML = a.length ? `
+    <thead><tr><th>#</th><th>Produto</th><th class="num">Un.</th><th class="num">Receita</th>
+      <th class="num">% da receita</th><th class="num">% acumulado</th><th>Classe</th></tr></thead>
+    <tbody>${a.map(r=>`<tr>
+      <td>${r.posicao}</td><td style="max-width:400px">${r.produto_nome}</td>
+      <td class="num">${N(r.unidades)}</td><td class="num">${R(r.receita)}</td>
+      <td class="num">${P(r.pct)}</td><td class="num">${P(r.pct_acumulado)}</td>
+      <td><span class="tag" style="${cor(r.classe)}">${r.classe}</span></td></tr>`).join('')}</tbody>`
+    : '<tbody><tr><td class="vazio">Sem dados no período</td></tr></tbody>';
+}
+
+// ── MIX DE VENDAS ──────────────────────────────────────────────
+function tabelaMix(elId, dados, rotulo){
+  const rec = soma(dados,'receita'), un = soma(dados,'unidades');
+  document.getElementById(elId).innerHTML = dados.length ? `
+    <thead><tr><th>${rotulo}</th><th class="num">Unidades</th><th class="num">% un.</th>
+      <th class="num">Pedidos</th><th class="num">Receita</th><th class="num">% receita</th>
+      <th style="width:200px">Participação</th></tr></thead>
+    <tbody>${dados.map(r=>{
+      const pct = rec? r.receita/rec*100 : 0;
+      return `<tr><td><b>${r.chave}</b></td>
+        <td class="num">${N(r.unidades)}</td><td class="num">${un?P(r.unidades/un*100):'—'}</td>
+        <td class="num">${N(r.pedidos)}</td><td class="num">${R(r.receita)}</td>
+        <td class="num">${P(pct)}</td>
+        <td><div style="background:var(--gray2);border-radius:4px;height:14px;overflow:hidden">
+          <div style="width:${pct.toFixed(1)}%;height:100%;background:var(--teal)"></div></div></td></tr>`;
+    }).join('')}</tbody>
+    <tfoot><tr><td>TOTAL</td><td class="num">${N(un)}</td><td class="num">100,0%</td>
+      <td class="num">${N(soma(dados,'pedidos'))}</td><td class="num">${R(rec)}</td>
+      <td class="num">100,0%</td><td></td></tr></tfoot>`
+    : '<tbody><tr><td class="vazio">Sem dados no período</td></tr></tbody>';
+}
+function renderMix(){
+  tabelaMix('t-mix-tam',  cache.mixTam,  'Tamanho');
+  tabelaMix('t-mix-mold', cache.mixMold, 'Acabamento');
+  tabelaMix('t-mix-tipo', cache.mixTipo, 'Tipo');
+}
+
+// ── ESTADOS ────────────────────────────────────────────────────
+function renderUF(){
+  const u = cache.uf;
+  const rec = soma(u,'receita'), ped = soma(u,'pedidos');
+  document.getElementById('uf-info').textContent =
+    u.length ? `${u.length} estados · ${N(ped)} pedidos` : '';
+  document.getElementById('t-uf').innerHTML = u.length ? `
+    <thead><tr><th>#</th><th>Estado</th><th class="num">Pedidos</th><th class="num">% pedidos</th>
+      <th class="num">Unidades</th><th class="num">Receita</th><th class="num">% receita</th>
+      <th class="num">Ticket médio</th><th style="width:200px">Participação</th></tr></thead>
+    <tbody>${u.map((r,i)=>{
+      const pct = rec? r.receita/rec*100 : 0;
+      return `<tr><td>${i+1}</td><td><b>${r.uf}</b></td>
+        <td class="num">${N(r.pedidos)}</td><td class="num">${ped?P(r.pedidos/ped*100):'—'}</td>
+        <td class="num">${N(r.unidades)}</td><td class="num">${R(r.receita)}</td>
+        <td class="num">${P(pct)}</td><td class="num">${R(r.ticket_medio)}</td>
+        <td><div style="background:var(--gray2);border-radius:4px;height:14px;overflow:hidden">
+          <div style="width:${pct.toFixed(1)}%;height:100%;background:#E8622A"></div></div></td></tr>`;
+    }).join('')}</tbody>
+    <tfoot><tr><td colspan="2">TOTAL</td><td class="num">${N(ped)}</td><td class="num">100,0%</td>
+      <td class="num">${N(soma(u,'unidades'))}</td><td class="num">${R(rec)}</td>
+      <td class="num">100,0%</td><td class="num">${R(ped?rec/ped:0)}</td><td></td></tr></tfoot>`
+    : '<tbody><tr><td class="vazio">Sem dados no período</td></tr></tbody>';
 }
 
 // ── DESPESAS ───────────────────────────────────────────────────
