@@ -22,6 +22,26 @@ button{font-family:inherit;cursor:pointer}
 .btn-mini{padding:4px 8px;font-size:11px;border-radius:5px;border:1px solid #CBD5E1;background:#fff;color:var(--gray3);font-weight:600;margin-right:4px}
 .pin{width:90px;padding:5px 6px;border:1px solid #CBD5E1;border-radius:5px;font-size:12px;text-align:right}
 .pin.mudou{border-color:var(--teal);background:#ECFDF5;font-weight:700}
+
+.barras{display:block}
+.b-cab,.b-lin{display:grid;grid-template-columns:1fr 200px 110px 110px 110px 110px;
+  gap:12px;align-items:center;padding:9px 10px}
+.b-cab{font-size:10px;font-weight:700;color:var(--gray3);text-transform:uppercase;
+  letter-spacing:.3px;border-bottom:1px solid var(--gray2)}
+.b-lin{border-bottom:1px solid #F1F5F9}
+.b-lin:hover{background:var(--kpi)}
+.b-nome{font-weight:600;color:var(--navy);display:flex;align-items:center;gap:7px}
+.b-track{background:#EDF2F4;border-radius:4px;height:14px;overflow:hidden}
+.b-fill{background:var(--teal);height:100%;border-radius:0 4px 4px 0;min-width:3px}
+.b-val{font-weight:700;color:var(--navy)}
+.d-sobe{color:var(--red);font-weight:700}
+.d-cai{color:var(--green);font-weight:700}
+.d-igual,.d-novo{color:var(--gray3);font-weight:600}
+@media(max-width:900px){
+  .b-cab{display:none}
+  .b-lin{grid-template-columns:1fr 1fr;gap:6px}
+  .b-track{grid-column:1/-1}
+}
 .tag{display:inline-block;padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700;background:#F1F5F9;color:var(--gray3)}
 .btn:hover{filter:brightness(1.1)} .btn:disabled{opacity:.5;cursor:not-allowed}
 .btn-sm{padding:5px 10px;font-size:11px}
@@ -84,6 +104,26 @@ tfoot td{background:var(--navy);color:#fff;font-weight:700;border:none}
 .grid3{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
 @media(max-width:800px){.grid2{grid-template-columns:1fr}}
 
+
+.barras{display:block}
+.b-cab,.b-lin{display:grid;grid-template-columns:1fr 200px 110px 110px 110px 110px;
+  gap:12px;align-items:center;padding:9px 10px}
+.b-cab{font-size:10px;font-weight:700;color:var(--gray3);text-transform:uppercase;
+  letter-spacing:.3px;border-bottom:1px solid var(--gray2)}
+.b-lin{border-bottom:1px solid #F1F5F9}
+.b-lin:hover{background:var(--kpi)}
+.b-nome{font-weight:600;color:var(--navy);display:flex;align-items:center;gap:7px}
+.b-track{background:#EDF2F4;border-radius:4px;height:14px;overflow:hidden}
+.b-fill{background:var(--teal);height:100%;border-radius:0 4px 4px 0;min-width:3px}
+.b-val{font-weight:700;color:var(--navy)}
+.d-sobe{color:var(--red);font-weight:700}
+.d-cai{color:var(--green);font-weight:700}
+.d-igual,.d-novo{color:var(--gray3);font-weight:600}
+@media(max-width:900px){
+  .b-cab{display:none}
+  .b-lin{grid-template-columns:1fr 1fr;gap:6px}
+  .b-track{grid-column:1/-1}
+}
 .tag{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700}
 .tag-fix{background:#E0E7FF;color:#3730A3} .tag-var{background:#FEF3C7;color:var(--yellow)}
 .aviso{padding:11px 13px;border-radius:8px;font-size:12px;margin-bottom:12px;line-height:1.5}
@@ -229,6 +269,10 @@ tfoot td{background:var(--navy);color:#fff;font-weight:700;border:none}
 
   <!-- ── DESPESAS ── -->
   <div class="page" id="p-despesas">
+    <div class="sec">
+      <h2>Para onde vai o dinheiro <span class="hint">ordenado do maior para o menor, no período do filtro</span></h2>
+      <div id="gastos"></div>
+    </div>
     <div class="sec">
       <h2>Lançar despesa</h2>
       <div class="grid3">
@@ -679,7 +723,7 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
 function renderTudo(){
   renderDash(); renderMensal(); renderDRE(); renderMargem();
   renderTop(); renderABC(); renderMix(); renderUF();
-  renderDespesas(); renderCustos(); renderImpostos(); renderConf(); renderExtrato(); renderCC();
+  renderDespesas(); renderCustos(); renderImpostos(); renderConf(); renderExtrato(); renderCC(); renderGastos();
 }
 
 const soma = (arr,f) => arr.reduce((s,x)=>s+(Number(x[f])||0),0);
@@ -1316,6 +1360,95 @@ function simular(){
     ${faltando.length ? `<div class="aviso aviso-w" style="margin-top:10px">Sem preço para ${tam}, ficaram de fora: ${faltando.join(', ')}.</div>` : ''}
     <div class="aviso aviso-i" style="margin-top:10px">A comissão é estimada pela tabela da Shopee de 2026
       e não considera imposto nem despesa fixa. O ROAS de equilíbrio sai do preço dividido pela margem.</div>`;
+}
+
+// ── PARA ONDE VAI O DINHEIRO ───────────────────────────────────
+async function renderGastos(){
+  const el = document.getElementById('gastos');
+  const { data, error } = await sb.rpc('ec_despesas_categoria', {
+    p_de: filtro.de, p_ate: filtro.ate,
+    p_loja: filtro.loja ? Number(filtro.loja) : null });
+  if (error){ toast('Erro em despesas por categoria: '+error.message,'er'); return; }
+
+  const receita = soma(cache.vendas, 'receita_bruta');
+  const linhas  = (data||[]).map(r => ({...r, valor:+r.valor, valor_ant:+r.valor_ant}));
+
+  // o que dá para agir: despesa operacional. O resto entra como contexto.
+  const oper  = linhas.filter(r => r.grupo_dre === 'despesa_operacional' && r.valor > 0)
+                      .sort((a,b) => b.valor - a.valor);
+  const fora  = linhas.filter(r => r.grupo_dre !== 'despesa_operacional' && r.valor > 0)
+                      .sort((a,b) => b.valor - a.valor);
+
+  if (!oper.length){
+    el.innerHTML = '<div class="aviso aviso-i">Sem despesas operacionais no período escolhido.</div>';
+    return;
+  }
+
+  const total    = oper.reduce((s,r) => s + r.valor, 0);
+  const totalAnt = oper.reduce((s,r) => s + r.valor_ant, 0);
+  const maior    = oper[0];
+  const maxVal   = maior.valor;
+  const varTotal = totalAnt ? (total - totalAnt) / totalAnt * 100 : null;
+
+  // seta + palavra: a cor nunca é o único sinal
+  const delta = (v, ant) => {
+    if (!ant) return '<span class="d-novo">novo</span>';
+    const p = (v - ant) / ant * 100;
+    if (Math.abs(p) < 0.5) return '<span class="d-igual">— igual</span>';
+    const cls = p > 0 ? 'd-sobe' : 'd-cai';
+    return `<span class="${cls}">${p > 0 ? '▲' : '▼'} ${P(Math.abs(p))}</span>`;
+  };
+
+  el.innerHTML = `
+    <div class="kpis" style="margin-bottom:16px">
+      ${kpi('Despesas operacionais', R(total),
+            receita ? P(total/receita*100) + ' da receita' : '')}
+      ${kpi('Maior categoria', esc(maior.categoria),
+            R(maior.valor) + ' · ' + P(maior.valor/total*100) + ' do total')}
+      ${kpi('Contra o período anterior',
+            varTotal === null ? '—' : (varTotal > 0 ? '+' : '') + P(varTotal),
+            totalAnt ? 'eram ' + R(totalAnt) : 'sem período anterior')}
+      ${kpi('Sobra depois delas', R(receita - total),
+            receita ? P((receita-total)/receita*100) + ' da receita' : '')}
+    </div>
+
+    <div class="barras">
+      <div class="b-cab">
+        <div>Categoria</div><div></div>
+        <div class="num">Valor</div><div class="num">% das despesas</div>
+        <div class="num">% da receita</div><div class="num">vs anterior</div>
+      </div>
+      ${oper.map(r => `
+        <div class="b-lin" title="${r.lancamentos} lançamento(s) no período">
+          <div class="b-nome">${esc(r.categoria)}
+            <span class="tag ${r.natureza==='fixa'?'tag-fix':'tag-var'}">${r.natureza}</span></div>
+          <div class="b-track"><div class="b-fill" style="width:${(r.valor/maxVal*100).toFixed(1)}%"></div></div>
+          <div class="num b-val">${R(r.valor)}</div>
+          <div class="num">${P(r.valor/total*100)}</div>
+          <div class="num">${receita ? P(r.valor/receita*100) : '—'}</div>
+          <div class="num">${delta(r.valor, r.valor_ant)}</div>
+        </div>`).join('')}
+    </div>
+
+    ${fora.length ? `
+    <h2 style="margin-top:22px">Fora do EBITDA <span class="hint">saem do caixa, mas não são despesa operacional</span></h2>
+    <div class="twrap"><table>
+      <thead><tr><th>Categoria</th><th class="num">Valor</th><th class="num">% da receita</th>
+        <th class="num">vs anterior</th><th>Por que fica de fora</th></tr></thead>
+      <tbody>${fora.map(r => `<tr>
+        <td>${esc(r.categoria)}</td><td class="num">${R(r.valor)}</td>
+        <td class="num">${receita ? P(r.valor/receita*100) : '—'}</td>
+        <td class="num">${delta(r.valor, r.valor_ant)}</td>
+        <td class="hint">${r.grupo_dre === 'nao_operacional' ? 'compra de estoque — vira custo quando o produto é vendido'
+                        : r.grupo_dre === 'cpv'              ? 'custo de produção — já entra no CPV'
+                        : r.grupo_dre === 'despesa_financeira' ? 'juros e parcelas — depois do EBITDA'
+                        : r.grupo_dre === 'deducao_venda'    ? 'imposto — já calculado sobre a receita'
+                        : r.grupo_dre}</td></tr>`).join('')}</tbody>
+    </table></div>` : ''}
+
+    <div class="aviso aviso-i" style="margin-top:14px">A coluna <b>% da receita</b> é a que mostra
+      oportunidade: uma despesa pode crescer em reais e ainda assim estar mais barata, se a venda
+      cresceu mais. A comparação é contra um período do mesmo tamanho imediatamente anterior.</div>`;
 }
 
 // ── CONTA CORRENTE ENTRE EMPRESAS ──────────────────────────────
