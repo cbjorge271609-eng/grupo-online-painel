@@ -137,6 +137,7 @@ tfoot td{background:var(--navy);color:#fff;font-weight:700;border:none}
   <button data-p="despesas">Despesas</button>
   <button data-p="custos">Custos de produção</button>
   <button data-p="extrato">Extrato bancário</button>
+  <button data-p="cc">Entre empresas</button>
   <button data-p="dados">Importar dados</button>
 </nav>
 
@@ -233,6 +234,9 @@ tfoot td{background:var(--navy);color:#fff;font-weight:700;border:none}
       <div class="grid3">
         <div><label>Empresa</label><select id="d-empresa"></select></div>
         <div><label>Loja (vazio = rateia)</label><select id="d-loja"></select></div>
+        <div><label>Quem paga essa conta</label><select id="d-escopo">
+          <option value="empresa">Só as lojas desta empresa</option>
+          <option value="grupo">As 3 lojas do grupo</option></select></div>
         <div><label>Categoria</label><select id="d-cat"></select></div>
         <div><label>Competência</label><input type="month" id="d-comp"></div>
         <div><label>Valor R$</label><input type="number" step="0.01" id="d-valor"></div>
@@ -319,6 +323,29 @@ tfoot td{background:var(--navy);color:#fff;font-weight:700;border:none}
     </div>
   </div>
 
+  <!-- ── CONTA CORRENTE ── -->
+  <div class="page" id="p-cc">
+    <div class="sec">
+      <h2>Quem pagou as contas do grupo
+        <span class="hint">despesas marcadas como "grupo" rateadas pela receita de cada loja</span></h2>
+      <div class="twrap"><table id="t-cc"></table></div>
+      <div class="aviso aviso-w" style="margin-top:12px">Saldo <b>positivo</b> = essa empresa pagou mais
+        do que a fatia dela e tem a receber das outras. <b>Negativo</b> = deve.
+        Transferência entre CNPJs diferentes não é automática: leve esses números ao contador para
+        formalizar (contrato de rateio de despesas comuns ou mútuo). Sem documento, o dinheiro que
+        anda entre as empresas pode virar problema fiscal.</div>
+    </div>
+    <div class="sec">
+      <h2>Combinado do mês <span class="hint">quanto cada empresa transfere para a conta que paga</span></h2>
+      <div class="grid3">
+        <div><label>Rotina Kids · valor fixo R$</label><input type="number" step="0.01" id="cc-rk"></div>
+        <div><label>Decor Baby · valor fixo R$</label><input type="number" step="0.01" id="cc-db"></div>
+        <div style="display:flex;align-items:end"><button class="btn" id="cc-salvar">Guardar combinado</button></div>
+      </div>
+      <div id="cc-comp" style="margin-top:14px"></div>
+    </div>
+  </div>
+
   <!-- ── EXTRATO ── -->
   <div class="page" id="p-extrato">
     <div class="sec">
@@ -327,6 +354,10 @@ tfoot td{background:var(--navy);color:#fff;font-weight:700;border:none}
         <div><label>Empresa dona da conta</label><select id="x-empresa"></select></div>
         <div><label>Apelido da conta</label><input id="x-apelido" placeholder="Inter — NT Gráfica"></div>
         <div><label>Arquivo .OFX</label><input type="file" id="x-file" accept=".ofx,.OFX"></div>
+        <div style="display:flex;align-items:end">
+          <label style="display:flex;align-items:center;gap:6px;font-weight:600;color:var(--gray3)">
+            <input type="checkbox" id="x-grupo" checked style="width:auto">
+            esta conta paga as contas das 3 lojas</label></div>
       </div>
       <div style="display:flex;gap:8px;margin-top:10px">
         <button class="btn" id="x-ler" disabled>Ler arquivo</button>
@@ -628,7 +659,7 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
 function renderTudo(){
   renderDash(); renderMensal(); renderDRE(); renderMargem();
   renderTop(); renderABC(); renderMix(); renderUF();
-  renderDespesas(); renderCustos(); renderImpostos(); renderConf(); renderExtrato();
+  renderDespesas(); renderCustos(); renderImpostos(); renderConf(); renderExtrato(); renderCC();
 }
 
 const soma = (arr,f) => arr.reduce((s,x)=>s+(Number(x[f])||0),0);
@@ -969,6 +1000,8 @@ document.getElementById('d-add').onclick = async ()=>{
     categoria_id: +document.getElementById('d-cat').value,
     competencia: comp+'-01', descricao: desc, valor,
     recorrente: document.getElementById('d-rec').checked,
+    escopo: document.getElementById('d-loja').value ? 'loja'
+          : document.getElementById('d-escopo').value,
   });
   if (error) return toast('Erro: '+error.message,'er');
   document.getElementById('d-valor').value=''; document.getElementById('d-desc').value='';
@@ -979,16 +1012,27 @@ function renderDespesas(){
   const d = cache.despesas;
   document.getElementById('t-despesas').innerHTML = d.length ? `
     <thead><tr><th>Competência</th><th>Descrição</th><th>Categoria</th><th>Natureza</th>
-      <th>Loja</th><th class="num">Valor</th><th></th></tr></thead>
+      <th>Loja</th><th>Rateio</th><th class="num">Valor</th><th></th></tr></thead>
     <tbody>${d.map(r=>`<tr>
       <td>${compLabel(r.competencia)}</td><td>${r.descricao}</td>
       <td>${r.ec_categorias?.nome||''}</td>
       <td><span class="tag ${r.ec_categorias?.natureza==='fixa'?'tag-fix':'tag-var'}">${r.ec_categorias?.natureza||''}</span></td>
       <td>${r.ec_lojas?.nome||'<i style="color:var(--gray3)">rateia</i>'}</td>
+      <td>${r.loja_id ? '<span class="tag">só a loja</span>'
+           : `<select onchange="mudarEscopo(${r.id}, this.value)" style="min-width:150px">
+                <option value="empresa"${r.escopo==='empresa'?' selected':''}>só a empresa</option>
+                <option value="grupo"${r.escopo==='grupo'?' selected':''}>as 3 lojas</option></select>`}</td>
       <td class="num">${R(r.valor)}</td>
       <td><button class="btn btn-sm btn-red" onclick="apagarDespesa(${r.id})">Apagar</button></td></tr>`).join('')}</tbody>
-    <tfoot><tr><td colspan="5">TOTAL</td><td class="num">${R(soma(d,'valor'))}</td><td></td></tr></tfoot>`
+    <tfoot><tr><td colspan="6">TOTAL</td><td class="num">${R(soma(d,'valor'))}</td><td></td></tr></tfoot>`
     : '<tbody><tr><td class="vazio">Nenhuma despesa lançada no período</td></tr></tbody>';
+}
+async function mudarEscopo(id, escopo){
+  const { error } = await sb.from('ec_despesas').update({ escopo }).eq('id', id);
+  if (error) return toast('Erro: '+error.message,'er');
+  toast(escopo==='grupo' ? 'Passou a ser rateada entre as 3 lojas.'
+                         : 'Voltou a ser rateada só entre as lojas da empresa.','ok');
+  recarregar();
 }
 async function apagarDespesa(id){
   if (!confirm('Apagar esta despesa?')) return;
@@ -1202,6 +1246,56 @@ function simular(){
       e não considera imposto nem despesa fixa. O ROAS de equilíbrio sai do preço dividido pela margem.</div>`;
 }
 
+// ── CONTA CORRENTE ENTRE EMPRESAS ──────────────────────────────
+const CC_KEY = 'grupont_combinado';
+const ccLer  = () => { try { return JSON.parse(localStorage.getItem(CC_KEY)||'{}'); } catch(e){ return {}; } };
+
+document.getElementById('cc-salvar').onclick = ()=>{
+  const v = { rk: parseFloat(document.getElementById('cc-rk').value)||0,
+              db: parseFloat(document.getElementById('cc-db').value)||0 };
+  try { localStorage.setItem(CC_KEY, JSON.stringify(v)); } catch(e){}
+  toast('Combinado guardado neste navegador.','ok');
+  renderCC();
+};
+
+async function renderCC(){
+  const { data, error } = await sb.from('ec_vw_conta_corrente').select('*');
+  if (error) return toast('Erro na conta corrente: '+error.message,'er');
+  const lin = (data||[]).filter(r => !filtro.de || (r.competencia >= filtro.de && r.competencia <= filtro.ate));
+
+  document.getElementById('t-cc').innerHTML = lin.length ? `
+    <thead><tr><th>Competência</th><th>Empresa</th><th class="num">Receita</th><th class="num">Fatia</th>
+      <th class="num">Pagou</th><th class="num">Cota dela</th><th class="num">Saldo</th></tr></thead>
+    <tbody>${lin.map(r=>`<tr>
+      <td>${compLabel(r.competencia)}</td><td><b>${esc(r.empresa)}</b></td>
+      <td class="num">${R(r.receita)}</td><td class="num">${P(r.pct_receita)}</td>
+      <td class="num">${R(r.pagou)}</td><td class="num">${R(r.cota)}</td>
+      <td class="num ${Number(r.saldo)>=0?'pos':'neg'}"><b>${R(r.saldo)}</b></td></tr>`).join('')}</tbody>`
+    : '<tbody><tr><td class="vazio">Marque despesas como "grupo" para elas aparecerem aqui.</td></tr></tbody>';
+
+  const comb = ccLer();
+  if (document.getElementById('cc-rk').value === '') document.getElementById('cc-rk').value = comb.rk || '';
+  if (document.getElementById('cc-db').value === '') document.getElementById('cc-db').value = comb.db || '';
+
+  // último mês fechado, para comparar o combinado com a cota real
+  const ult = lin.length ? lin.reduce((a,b) => a.competencia > b.competencia ? a : b).competencia : null;
+  const doMes = lin.filter(r => r.competencia === ult);
+  const cota = n => { const r = doMes.find(x => x.empresa.includes(n)); return r ? Number(r.cota) : 0; };
+  const cRK = cota('RC'), cDB = cota('CS');
+  const dif = (fixo, real) => fixo ? `<span class="${fixo>=real?'pos':'neg'}">${fixo>=real?'cobre':'faltam '+R(real-fixo)}</span>` : '—';
+
+  document.getElementById('cc-comp').innerHTML = !ult ? '' : `
+    <div class="twrap"><table>
+      <thead><tr><th>Empresa</th><th class="num">Cota em ${compLabel(ult)}</th>
+        <th class="num">Combinado fixo</th><th>Situação</th></tr></thead>
+      <tbody>
+        <tr><td>RC Comunicação Visual · Rotina Kids</td><td class="num">${R(cRK)}</td>
+            <td class="num">${R(comb.rk||0)}</td><td>${dif(comb.rk||0, cRK)}</td></tr>
+        <tr><td>CS Gráfica · Decor Baby</td><td class="num">${R(cDB)}</td>
+            <td class="num">${R(comb.db||0)}</td><td>${dif(comb.db||0, cDB)}</td></tr>
+      </tbody></table></div>`;
+}
+
 // ── EXTRATO BANCÁRIO (.OFX) ────────────────────────────────────
 const slug  = s => String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'').slice(0,12) || 'banco';
 const esc   = s => String(s==null?'':s).replace(/[&<>"]/g, c =>
@@ -1359,7 +1453,8 @@ async function gerarDespesas(empresaId){
     const linha = { empresa_id: empresaId, loja_id: null, categoria_id: l.categoria_id,
                     competencia: l.data_mov.slice(0,8)+'01', data_evento: l.data_mov,
                     descricao: l.descricao, valor: Math.abs(l.valor),
-                    recorrente: false, origem: 'extrato', lancamento_id: l.id };
+                    recorrente: false, origem: 'extrato', lancamento_id: l.id,
+                    escopo: document.getElementById('x-grupo').checked ? 'grupo' : 'empresa' };
     if (!d) novas.push(linha);
     else if (d.categoria_id !== l.categoria_id) corrigir.push({ id: d.id, categoria_id: l.categoria_id });
   }
