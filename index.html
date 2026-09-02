@@ -250,6 +250,26 @@ tfoot td{background:var(--navy);color:#fff;font-weight:700;border:none}
       <div class="aviso aviso-i" style="margin-top:12px">Deixar a loja em branco quer dizer que a despesa é da
         empresa inteira. O DRE distribui pelas lojas dela na proporção do faturamento do mês.</div>
     </div>
+    <div class="sec" id="sec-edit" style="display:none">
+      <h2>Editar lançamento — <span id="e-desc"></span></h2>
+      <div class="grid3">
+        <div><label>Categoria</label><select id="e-cat"></select></div>
+        <div><label>Rateio</label><select id="e-escopo">
+          <option value="empresa">Só as lojas desta empresa</option>
+          <option value="grupo">As 3 lojas do grupo</option></select></div>
+        <div><label>Loja (vazio = rateia)</label><select id="e-loja"></select></div>
+        <div><label>Parcela nº</label><input type="number" min="1" id="e-pnum" placeholder="3"></div>
+        <div><label>de quantas</label><input type="number" min="1" id="e-ptot" placeholder="10"></div>
+        <div><label>Observação</label><input id="e-obs" placeholder="Moldura filete — boleto 4523"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn" id="e-salvar">Salvar</button>
+        <button class="btn btn-sec" onclick="document.getElementById('sec-edit').style.display='none'">Cancelar</button>
+      </div>
+      <div class="aviso aviso-i" style="margin-top:12px">Se o lançamento veio do extrato, a categoria nova
+        também é gravada no banco de origem — assim ela não volta atrás na próxima importação.
+        Preencher a parcela é opcional; serve só para você lembrar quantas faltam.</div>
+    </div>
     <div class="sec"><h2>Despesas do período</h2><div class="twrap"><table id="t-despesas"></table></div></div>
   </div>
 
@@ -1012,21 +1032,73 @@ function renderDespesas(){
   const d = cache.despesas;
   document.getElementById('t-despesas').innerHTML = d.length ? `
     <thead><tr><th>Competência</th><th>Descrição</th><th>Categoria</th><th>Natureza</th>
-      <th>Loja</th><th>Rateio</th><th class="num">Valor</th><th></th></tr></thead>
+      <th>Loja</th><th>Rateio</th><th>Observação</th><th class="num">Valor</th><th></th></tr></thead>
     <tbody>${d.map(r=>`<tr>
-      <td>${compLabel(r.competencia)}</td><td>${r.descricao}</td>
-      <td>${r.ec_categorias?.nome||''}</td>
+      <td>${compLabel(r.competencia)}</td><td>${esc(r.descricao)}</td>
+      <td>${esc(r.ec_categorias?.nome||'')}</td>
       <td><span class="tag ${r.ec_categorias?.natureza==='fixa'?'tag-fix':'tag-var'}">${r.ec_categorias?.natureza||''}</span></td>
       <td>${r.ec_lojas?.nome||'<i style="color:var(--gray3)">rateia</i>'}</td>
       <td>${r.loja_id ? '<span class="tag">só a loja</span>'
            : `<select onchange="mudarEscopo(${r.id}, this.value)" style="min-width:150px">
                 <option value="empresa"${r.escopo==='empresa'?' selected':''}>só a empresa</option>
                 <option value="grupo"${r.escopo==='grupo'?' selected':''}>as 3 lojas</option></select>`}</td>
+      <td>${r.parcela_total ? `<span class="tag">${r.parcela_num}/${r.parcela_total}</span> ` : ''}
+          ${esc(r.observacao||'')}</td>
       <td class="num">${R(r.valor)}</td>
-      <td><button class="btn btn-sm btn-red" onclick="apagarDespesa(${r.id})">Apagar</button></td></tr>`).join('')}</tbody>
-    <tfoot><tr><td colspan="6">TOTAL</td><td class="num">${R(soma(d,'valor'))}</td><td></td></tr></tfoot>`
+      <td style="white-space:nowrap">
+        <button class="btn-mini" onclick="editarDespesa(${r.id})">Editar</button>
+        <button class="btn btn-sm btn-red" onclick="apagarDespesa(${r.id})">Apagar</button></td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="7">TOTAL</td><td class="num">${R(soma(d,'valor'))}</td><td></td></tr></tfoot>`
     : '<tbody><tr><td class="vazio">Nenhuma despesa lançada no período</td></tr></tbody>';
 }
+let editandoId = null;
+function editarDespesa(id){
+  const r = (cache.despesas||[]).find(x => x.id === id);
+  if (!r) return;
+  editandoId = id;
+  document.getElementById('e-desc').textContent = r.descricao + ' · ' + R(r.valor);
+  document.getElementById('e-cat').innerHTML = cache.categorias
+    .map(c=>`<option value="${c.id}"${c.id===r.categoria_id?' selected':''}>${esc(c.nome)} · ${c.natureza}</option>`).join('');
+  document.getElementById('e-loja').innerHTML = '<option value="">— rateia —</option>' +
+    cache.lojas.map(l=>`<option value="${l.id}"${l.id===r.loja_id?' selected':''}>${esc(l.nome)}</option>`).join('');
+  document.getElementById('e-escopo').value = r.escopo === 'grupo' ? 'grupo' : 'empresa';
+  document.getElementById('e-pnum').value = r.parcela_num   || '';
+  document.getElementById('e-ptot').value = r.parcela_total || '';
+  document.getElementById('e-obs').value  = r.observacao    || '';
+  const sec = document.getElementById('sec-edit');
+  sec.style.display = ''; sec.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+document.getElementById('e-salvar').onclick = async ()=>{
+  if (!editandoId) return;
+  const r = (cache.despesas||[]).find(x => x.id === editandoId);
+  const cat  = +document.getElementById('e-cat').value;
+  const loja = document.getElementById('e-loja').value || null;
+  const pnum = parseInt(document.getElementById('e-pnum').value) || null;
+  const ptot = parseInt(document.getElementById('e-ptot').value) || null;
+  if ((pnum && !ptot) || (ptot && !pnum)) return toast('Preencha as duas caixas da parcela, ou nenhuma.','er');
+  if (pnum && ptot && pnum > ptot)        return toast('O número da parcela não pode ser maior que o total.','er');
+
+  const { error } = await sb.from('ec_despesas').update({
+    categoria_id: cat, loja_id: loja ? Number(loja) : null,
+    escopo: loja ? 'loja' : document.getElementById('e-escopo').value,
+    parcela_num: pnum, parcela_total: ptot,
+    observacao: document.getElementById('e-obs').value.trim() || null,
+  }).eq('id', editandoId);
+  if (error) return toast('Erro: '+error.message,'er');
+
+  // veio do extrato? grava a categoria lá também, senão a importação desfaz
+  if (r && r.lancamento_id){
+    const { error: e2 } = await sb.from('ec_extrato_lancamentos')
+      .update({ categoria_id: cat, conciliado: true }).eq('id', r.lancamento_id);
+    if (e2) toast('A despesa foi salva, mas não consegui atualizar o extrato: '+e2.message,'er');
+  }
+  document.getElementById('sec-edit').style.display = 'none';
+  editandoId = null;
+  toast('Lançamento atualizado.','ok');
+  recarregar();
+};
+
 async function mudarEscopo(id, escopo){
   const { error } = await sb.from('ec_despesas').update({ escopo }).eq('id', id);
   if (error) return toast('Erro: '+error.message,'er');
@@ -1339,6 +1411,7 @@ function classificar(linha, regras, empresaId){
     .filter(r => r.ativa && (r.empresa_id == null || r.empresa_id === empresaId))
     .filter(r => texto.includes(r.padrao.toUpperCase()))
     .sort((a,b) => b.prioridade - a.prioridade);
+  if (cand.length && cand[0].ignorar) return { categoria_id: null, ignorado: true };
   return { categoria_id: cand.length ? cand[0].categoria_id : CAT_PENDENTE,
            ignorado: false };
 }
