@@ -239,11 +239,22 @@ tfoot td{background:var(--navy);color:#fff;font-weight:700;border:none}
   <div class="page" id="p-dados">
     <div class="sec">
       <h2>Trazer o histórico do app antigo</h2>
-      <div class="aviso aviso-i">Se você já usa o GrupoNT_App.html neste navegador, os pedidos estão salvos
-        aqui e podem subir para o banco de uma vez. Reenviar não duplica: cada pedido é identificado pelo
-        ID da Shopee e é substituído.</div>
+      <div class="aviso aviso-i">Reenviar não duplica: cada pedido é identificado pelo ID da Shopee
+        e é substituído. Pode repetir quantas vezes precisar.</div>
+
+      <div style="font-weight:700;font-size:12px;color:var(--navy);margin:16px 0 8px">
+        Opção 1 — arquivo de backup (.json)</div>
+      <div class="aviso aviso-i">É o caminho certo quando você abre o painel pelo endereço na internet.
+        No app antigo, clique em <b>Exportar Backup</b> e escolha aqui o arquivo <code>GrupoNT_Backup_....json</code>.</div>
+      <div class="grid3">
+        <div><label>Arquivo de backup</label><input type="file" id="mig-file" accept=".json,application/json"></div>
+        <div style="display:flex;align-items:end"><button class="btn" id="mig-file-btn">Importar do arquivo</button></div>
+      </div>
+
+      <div style="font-weight:700;font-size:12px;color:var(--navy);margin:20px 0 8px">
+        Opção 2 — direto deste navegador</div>
       <div id="mig-status"></div>
-      <button class="btn" id="mig-btn">Enviar histórico local para o banco</button>
+      <button class="btn btn-ghost" id="mig-btn">Enviar histórico deste navegador</button>
       <div class="log" id="mig-log" style="margin-top:12px;display:none"></div>
     </div>
     <div class="sec">
@@ -874,17 +885,17 @@ function lerLocal(){
 function renderMigStatus(){
   const st = lerLocal(); const el = document.getElementById('mig-status');
   if (!st || !st.orders?.length){
-    el.innerHTML = '<div class="aviso aviso-w">Nenhum dado do app antigo encontrado neste navegador. '
-      + 'Abra esta página no mesmo navegador em que você usa o GrupoNT_App.html.</div>';
+    el.innerHTML = '<div class="aviso aviso-w">Nada encontrado no armazenamento deste endereço. '
+      + 'É o normal quando o painel roda na internet e o app antigo roda como arquivo no computador — '
+      + 'cada endereço tem seu próprio armazenamento. <b>Use a Opção 1, do arquivo .json.</b></div>';
     document.getElementById('mig-btn').disabled = true; return;
   }
   el.innerHTML = `<div class="aviso aviso-ok">Encontrei <b>${N(st.orders.length)}</b> pedidos válidos e
     <b>${N((st.canceled||[]).length)}</b> cancelados no armazenamento deste navegador.</div>`;
   document.getElementById('mig-btn').disabled = false;
 }
-document.getElementById('mig-btn').onclick = async ()=>{
-  const st = lerLocal(); if (!st) return;
-  const btn = document.getElementById('mig-btn'); btn.disabled=true; btn.textContent='Enviando...';
+async function migrar(st, btn, rotulo){
+  btn.disabled=true; const txt = btn.textContent; btn.textContent='Enviando...';
   document.getElementById('mig-log').innerHTML='';
   try {
     const porLoja = {}; cache.lojas.forEach(l=>porLoja[l.nome]=l.id);
@@ -922,7 +933,34 @@ document.getElementById('mig-btn').onclick = async ()=>{
   } catch(err){
     log('mig-log', '✗ '+err.message, 'er'); toast('Falhou: '+err.message,'er');
   }
-  btn.disabled=false; btn.textContent='Enviar histórico local para o banco';
+  btn.disabled=false; btn.textContent = txt;
+}
+
+// Opção 1: arquivo .json exportado pelo app antigo. Funciona de qualquer lugar,
+// porque não depende do armazenamento do navegador — que é separado por endereço.
+document.getElementById('mig-file-btn').onclick = ()=>{
+  const f = document.getElementById('mig-file').files[0];
+  if (!f) return toast('Escolha o arquivo .json primeiro.','er');
+  const btn = document.getElementById('mig-file-btn');
+  const r = new FileReader();
+  r.onload = async e => {
+    let st;
+    try { st = JSON.parse(e.target.result); }
+    catch(err){ return toast('Arquivo não é um JSON válido.','er'); }
+    if (!st || !Array.isArray(st.orders))
+      return toast('Esse JSON não parece um backup do GrupoNT (falta a lista de pedidos).','er');
+    log('mig-log', `arquivo ${f.name}: ${st.orders.length} pedidos e ${(st.canceled||[]).length} cancelados`);
+    await migrar(st, btn);
+  };
+  r.readAsText(f);
+};
+
+// Opção 2: armazenamento deste navegador. Só encontra algo se o app antigo
+// rodar no MESMO endereço — não funciona do site publicado.
+document.getElementById('mig-btn').onclick = ()=>{
+  const st = lerLocal();
+  if (!st) return toast('Nada encontrado no armazenamento deste endereço. Use o arquivo .json.','er');
+  migrar(st, document.getElementById('mig-btn'));
 };
 
 // ── importação de planilha ─────────────────────────────────────
