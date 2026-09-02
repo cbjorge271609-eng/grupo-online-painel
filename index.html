@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Painel Grupo Online</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+:root{
+  --navy:#14484F; --teal:#1F6F78; --escuro:#0F3A40;
+  --kpi:#EDF5F5; --entrada:#FFF8DB; --alerta:#FBE9E7; --ok:#E1F2DE;
+  --red:#B91C1C; --green:#166534; --yellow:#92400E; --gray1:#F8FAFC;
+  --gray2:#E2E8F0; --gray3:#64748B; --txt:#1F2937;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,Helvetica,sans-serif;background:var(--gray1);color:var(--txt);font-size:13px}
+button{font-family:inherit;cursor:pointer}
+.btn{padding:8px 14px;border:none;border-radius:6px;background:var(--teal);color:#fff;font-size:12px;font-weight:700}
+.btn:hover{filter:brightness(1.1)} .btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-sm{padding:5px 10px;font-size:11px}
+.btn-ghost{background:#fff;color:var(--navy);border:1.5px solid var(--gray2)}
+.btn-red{background:var(--red)}
+input,select,textarea{font-family:inherit;font-size:12px;padding:7px 9px;border:1.5px solid var(--gray2);
+  border-radius:6px;width:100%;background:#fff}
+input:focus,select:focus{outline:2px solid var(--teal);outline-offset:-1px}
+label{font-size:11px;font-weight:700;color:var(--gray3);display:block;margin-bottom:4px}
+
+/* ── LOGIN ── */
+#login{position:fixed;inset:0;background:var(--navy);display:flex;align-items:center;
+  justify-content:center;z-index:100;padding:20px}
+#login .card{background:#fff;border-radius:12px;padding:32px;width:100%;max-width:380px}
+#login h1{font-size:19px;color:var(--navy);margin-bottom:4px}
+#login p.sub{font-size:12px;color:var(--gray3);margin-bottom:22px}
+#login .fld{margin-bottom:14px}
+#login .msg{margin-top:14px;font-size:12px;padding:10px;border-radius:6px;display:none}
+
+/* ── LAYOUT ── */
+#app{display:none}
+header{background:var(--navy);color:#fff;padding:0 18px;display:flex;align-items:center;
+  gap:16px;height:52px;position:sticky;top:0;z-index:20}
+header h1{font-size:15px;font-weight:700}
+header .sp{flex:1}
+header .who{font-size:11px;opacity:.85}
+nav{background:var(--escuro);padding:0 18px;display:flex;gap:2px;overflow-x:auto;position:sticky;top:52px;z-index:19}
+nav button{background:none;border:none;color:#B7CDD0;padding:11px 14px;font-size:12px;
+  font-weight:700;border-bottom:3px solid transparent;white-space:nowrap}
+nav button.on{color:#fff;border-bottom-color:#5FBDC7}
+.filtros{background:#fff;border-bottom:1px solid var(--gray2);padding:10px 18px;
+  display:flex;gap:10px;align-items:end;flex-wrap:wrap;position:sticky;top:93px;z-index:18}
+.filtros .f{min-width:150px}
+main{padding:18px}
+.page{display:none} .page.on{display:block}
+.sec{background:#fff;border-radius:10px;padding:16px;margin-bottom:16px;border:1px solid var(--gray2)}
+.sec h2{font-size:14px;color:var(--navy);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.sec h2 .hint{font-size:11px;font-weight:400;color:var(--gray3)}
+
+/* ── KPIs ── */
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
+.kpi{background:var(--kpi);border-radius:8px;padding:13px;border:1px solid var(--gray2)}
+.kpi .lb{font-size:10px;font-weight:700;color:var(--gray3);text-transform:uppercase;letter-spacing:.3px}
+.kpi .vl{font-size:20px;font-weight:700;color:var(--navy);margin:5px 0 2px}
+.kpi .sb{font-size:10px;color:var(--gray3)}
+.kpi.g .vl{color:var(--green)} .kpi.r .vl{color:var(--red)}
+
+/* ── TABELAS ── */
+.twrap{overflow-x:auto;border:1px solid var(--gray2);border-radius:8px}
+table{width:100%;border-collapse:collapse;font-size:12px;background:#fff}
+th{background:var(--teal);color:#fff;padding:9px 10px;text-align:left;font-size:11px;white-space:nowrap}
+td{padding:8px 10px;border-top:1px solid var(--gray2)}
+tbody tr:nth-child(even){background:#FCFDFD}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+tfoot td{background:var(--navy);color:#fff;font-weight:700;border:none}
+.pos{color:var(--green);font-weight:700} .neg{color:var(--red);font-weight:700}
+.vazio{text-align:center;padding:30px;color:var(--gray3)}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+@media(max-width:800px){.grid2{grid-template-columns:1fr}}
+
+.tag{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700}
+.tag-fix{background:#E0E7FF;color:#3730A3} .tag-var{background:#FEF3C7;color:var(--yellow)}
+.aviso{padding:11px 13px;border-radius:8px;font-size:12px;margin-bottom:12px;line-height:1.5}
+.aviso-i{background:#EFF6FF;border:1px solid #BFDBFE;color:#1E40AF}
+.aviso-w{background:var(--alerta);border:1px solid #F59E0B;color:var(--yellow)}
+.aviso-ok{background:var(--ok);border:1px solid #86EFAC;color:var(--green)}
+#toast{position:fixed;bottom:20px;right:20px;background:var(--navy);color:#fff;padding:12px 18px;
+  border-radius:8px;font-size:12px;z-index:200;display:none;max-width:320px}
+.log{background:#0F172A;color:#94A3B8;font-family:monospace;font-size:11px;padding:12px;
+  border-radius:6px;max-height:220px;overflow-y:auto;line-height:1.6}
+.log .ok{color:#4ADE80} .log .er{color:#F87171}
+.chart{height:230px}
+</style>
+</head>
+<body>
+
+<!-- ══════════ LOGIN ══════════ -->
+<div id="login">
+  <div class="card">
+    <h1>Painel Grupo Online</h1>
+    <p class="sub">Amo Brotinhos · Rotina Kids · Decor Baby</p>
+    <div class="fld"><label>E-mail</label><input type="email" id="li-mail" autocomplete="username"></div>
+    <div class="fld"><label>Senha</label><input type="password" id="li-pass" autocomplete="current-password"></div>
+    <button class="btn" style="width:100%" id="li-btn">Entrar</button>
+    <div class="msg" id="li-msg"></div>
+    <p style="font-size:11px;color:var(--gray3);margin-top:16px;line-height:1.5">
+      Sem conta? O acesso é criado pelo painel do Supabase, em Authentication → Users → Invite user.
+      Cada pessoa define a própria senha no primeiro acesso.</p>
+  </div>
+</div>
+
+<!-- ══════════ APP ══════════ -->
+<div id="app">
+<header>
+  <h1>Painel Grupo Online</h1>
+  <span class="sp"></span>
+  <span class="who" id="who"></span>
+  <button class="btn btn-sm btn-ghost" id="trocar">Trocar senha</button>
+  <button class="btn btn-sm btn-ghost" id="sair">Sair</button>
+</header>
+
+<nav>
+  <button data-p="dash" class="on">Visão geral</button>
+  <button data-p="mensal">Mensal</button>
+  <button data-p="dre">DRE e EBITDA</button>
+  <button data-p="margem">Margem e markup</button>
+  <button data-p="despesas">Despesas</button>
+  <button data-p="custos">Custos de produção</button>
+  <button data-p="dados">Importar dados</button>
+</nav>
+
+<div class="filtros">
+  <div class="f"><label>Loja</label><select id="f-loja"></select></div>
+  <div class="f"><label>De</label><select id="f-de"></select></div>
+  <div class="f"><label>Até</label><select id="f-ate"></select></div>
+  <button class="btn btn-sm" id="f-aplicar">Aplicar</button>
+  <span style="flex:1"></span>
+  <span style="font-size:11px;color:var(--gray3)" id="f-info"></span>
+</div>
+
+<main>
+  <!-- ── VISÃO GERAL ── -->
+  <div class="page on" id="p-dash">
+    <div class="sec"><h2>Indicadores do período</h2><div class="kpis" id="k-dash"></div></div>
+    <div class="grid2">
+      <div class="sec"><h2>Faturamento por mês</h2><div class="chart"><canvas id="c-fat"></canvas></div></div>
+      <div class="sec"><h2>EBITDA por mês</h2><div class="chart"><canvas id="c-ebitda"></canvas></div></div>
+    </div>
+    <div class="sec"><h2>Por loja no período</h2><div class="twrap"><table id="t-lojas"></table></div></div>
+  </div>
+
+  <!-- ── MENSAL ── -->
+  <div class="page" id="p-mensal">
+    <div class="sec">
+      <h2>Vendas por mês <span class="hint">a coluna "no painel" é o que você digitou do relatório da Shopee</span></h2>
+      <div class="twrap"><table id="t-mensal"></table></div>
+    </div>
+    <div class="sec">
+      <h2>Conferência contra o painel da Shopee</h2>
+      <div class="aviso aviso-i">Digite aqui o que o painel da Shopee mostra em Vendas e Pedidos.
+        A tabela acima passa a apontar qualquer diferença no mês em que ela aparecer.</div>
+      <div id="conf-form"></div>
+    </div>
+  </div>
+
+  <!-- ── DRE ── -->
+  <div class="page" id="p-dre">
+    <div class="sec">
+      <h2>DRE por mês <span class="hint">EBITDA já exclui financeiras, depreciação e imposto sobre lucro</span></h2>
+      <div class="twrap"><table id="t-dre"></table></div>
+    </div>
+    <div class="sec"><h2>Como o EBITDA é montado</h2><div class="twrap"><table id="t-cascata"></table></div></div>
+  </div>
+
+  <!-- ── MARGEM ── -->
+  <div class="page" id="p-margem">
+    <div class="sec">
+      <h2>Margem e markup por produto <span class="hint">markup = preço ÷ custo de produção</span></h2>
+      <div class="twrap"><table id="t-margem"></table></div>
+    </div>
+  </div>
+
+  <!-- ── DESPESAS ── -->
+  <div class="page" id="p-despesas">
+    <div class="sec">
+      <h2>Lançar despesa</h2>
+      <div class="grid3">
+        <div><label>Empresa</label><select id="d-empresa"></select></div>
+        <div><label>Loja (vazio = rateia)</label><select id="d-loja"></select></div>
+        <div><label>Categoria</label><select id="d-cat"></select></div>
+        <div><label>Competência</label><input type="month" id="d-comp"></div>
+        <div><label>Valor R$</label><input type="number" step="0.01" id="d-valor"></div>
+        <div><label>Descrição</label><input type="text" id="d-desc" placeholder="Aluguel do galpão"></div>
+        <div style="display:flex;align-items:end;gap:8px">
+          <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:11px">
+            <input type="checkbox" id="d-rec" style="width:auto">Repete todo mês</label>
+        </div>
+        <div style="display:flex;align-items:end"><button class="btn" id="d-add">Lançar</button></div>
+      </div>
+      <div class="aviso aviso-i" style="margin-top:12px">Deixar a loja em branco quer dizer que a despesa é da
+        empresa inteira. O DRE distribui pelas lojas dela na proporção do faturamento do mês.</div>
+    </div>
+    <div class="sec"><h2>Despesas do período</h2><div class="twrap"><table id="t-despesas"></table></div></div>
+  </div>
+
+  <!-- ── CUSTOS ── -->
+  <div class="page" id="p-custos">
+    <div class="sec">
+      <h2>Custos de produção <span class="hint">com vigência: mudar o custo hoje não altera o mês passado</span></h2>
+      <div class="grid3">
+        <div><label>Componente</label><select id="c-comp">
+          <option value="producao_quadro">Produção do quadro</option>
+          <option value="moldura_quadro">Moldura (por quadro)</option>
+          <option value="embalagem_kit">Embalagem (por kit)</option></select></div>
+        <div><label>Tamanho</label><select id="c-tam">
+          <option>20x30</option><option>30x40</option><option>40x60</option></select></div>
+        <div><label>Valor R$</label><input type="number" step="0.0001" id="c-valor"></div>
+        <div><label>Vale a partir de</label><input type="date" id="c-vig"></div>
+        <div style="display:flex;align-items:end"><button class="btn" id="c-add">Cadastrar</button></div>
+      </div>
+      <div class="aviso aviso-i" style="margin-top:12px">Ao cadastrar um custo novo, o anterior é encerrado
+        no dia anterior automaticamente. O histórico continua correto.</div>
+    </div>
+    <div class="sec"><h2>Tabela vigente</h2><div class="twrap"><table id="t-custos"></table></div></div>
+    <div class="sec">
+      <h2>Simulador de custo de kit</h2>
+      <div class="grid3">
+        <div><label>Tamanho</label><select id="s-tam"><option>20x30</option><option selected>30x40</option><option>40x60</option></select></div>
+        <div><label>Quadros no kit</label><input type="number" id="s-qtd" value="3" min="1"></div>
+        <div><label>Com moldura?</label><select id="s-mold"><option value="1">Sim</option><option value="0">Não</option></select></div>
+        <div><label>Preço de venda R$</label><input type="number" step="0.01" id="s-preco" value="159.90"></div>
+      </div>
+      <div id="s-out" style="margin-top:14px"></div>
+    </div>
+  </div>
+
+  <!-- ── DADOS ── -->
+  <div class="page" id="p-dados">
+    <div class="sec">
+      <h2>Trazer o histórico do app antigo</h2>
+      <div class="aviso aviso-i">Se você já usa o GrupoNT_App.html neste navegador, os pedidos estão salvos
+        aqui e podem subir para o banco de uma vez. Reenviar não duplica: cada pedido é identificado pelo
+        ID da Shopee e é substituído.</div>
+      <div id="mig-status"></div>
+      <button class="btn" id="mig-btn">Enviar histórico local para o banco</button>
+      <div class="log" id="mig-log" style="margin-top:12px;display:none"></div>
+    </div>
+    <div class="sec">
+      <h2>Importar planilha de pedidos da Shopee</h2>
+      <div class="grid3">
+        <div><label>Loja</label><select id="i-loja"></select></div>
+        <div><label>Arquivo</label><input type="file" id="i-file" accept=".xlsx,.xls" multiple></div>
+        <div style="display:flex;align-items:end"><button class="btn" id="i-btn">Importar</button></div>
+      </div>
+      <div class="aviso aviso-i" style="margin-top:12px">Exporte com um dia de folga nas duas pontas
+        (ex.: 31/07 a 02/09 para fechar agosto). O mês de cada pedido vem da data de pagamento, como na Shopee.</div>
+      <div class="log" id="i-log" style="margin-top:12px;display:none"></div>
+    </div>
+    <div class="sec">
+      <h2>Anúncios por mês</h2>
+      <div class="grid3">
+        <div><label>Loja</label><select id="a-loja"></select></div>
+        <div><label>Competência</label><input type="month" id="a-comp"></div>
+        <div><label>Investimento R$</label><input type="number" step="0.01" id="a-inv"></div>
+        <div><label>Vendas atribuídas R$</label><input type="number" step="0.01" id="a-vend"></div>
+        <div style="display:flex;align-items:end"><button class="btn" id="a-add">Salvar</button></div>
+      </div>
+      <div class="aviso aviso-i" style="margin-top:12px">O investimento em anúncio entra no DRE como despesa
+        e é o que produz o ROAS. Copie do painel do Shopee Ads.</div>
+    </div>
+    <div class="sec"><h2>Alíquota de imposto sobre a receita</h2><div class="twrap"><table id="t-imp"></table></div></div>
+  </div>
+</main>
+</div>
+<div id="modal-senha" style="position:fixed;inset:0;background:rgba(15,58,64,.75);z-index:150;
+     display:none;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:12px;padding:28px;width:100%;max-width:380px">
+    <h2 style="font-size:16px;color:var(--navy);margin-bottom:6px">Trocar senha</h2>
+    <p style="font-size:12px;color:var(--gray3);margin-bottom:18px">
+      Mínimo de 8 caracteres. Ninguém além de você fica sabendo — nem eu.</p>
+    <div style="margin-bottom:12px"><label>Senha nova</label>
+      <input type="password" id="ms-1" autocomplete="new-password"></div>
+    <div style="margin-bottom:16px"><label>Repita a senha nova</label>
+      <input type="password" id="ms-2" autocomplete="new-password"></div>
+    <div id="ms-msg" style="font-size:12px;margin-bottom:12px;display:none;padding:9px;border-radius:6px"></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" style="flex:1" id="ms-ok">Salvar</button>
+      <button class="btn btn-ghost" id="ms-cancel">Cancelar</button>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// CONEXÃO
+// ═══════════════════════════════════════════════════════════════
+const SUPA_URL = 'https://pdlhqqcazdlqzqyufbln.supabase.co';
+const SUPA_KEY = 'sb_publishable_P4KZeb1SJf12hjlk3Cedrw_5vPz06iH';
+const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+const ANO_HISTORICO = 2026;   // o app antigo guarda só o nome do mês
+
+let cache = { lojas:[], empresas:[], categorias:[], vendas:[], dre:[], margem:[], despesas:[], custos:[] };
+let filtro = { loja:'', de:'', ate:'' };
+let charts = {};
+
+const R = v => (v==null||isNaN(v)) ? '—'
+  : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const N = v => (v==null||isNaN(v)) ? '—' : Number(v).toLocaleString('pt-BR');
+const P = v => (v==null||isNaN(v)) ? '—' : Number(v).toFixed(1).replace('.',',')+'%';
+const X = v => (v==null||isNaN(v)) ? '—' : Number(v).toFixed(2).replace('.',',')+'x';
+const compLabel = c => { const [a,m] = c.split('-'); return MESES[+m-1] + '/' + a.slice(2); };
+
+function toast(msg, tipo){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = tipo==='er' ? '#B91C1C' : tipo==='ok' ? '#166534' : '#14484F';
+  t.style.display='block'; setTimeout(()=>t.style.display='none', 4000);
+}
+function log(el, msg, cls){
+  const d = document.getElementById(el); d.style.display='block';
+  d.innerHTML += `<div class="${cls||''}">${msg}</div>`; d.scrollTop = d.scrollHeight;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LOGIN
+// ═══════════════════════════════════════════════════════════════
+async function entrar(){
+  const mail = document.getElementById('li-mail').value.trim();
+  const pass = document.getElementById('li-pass').value;
+  const msg  = document.getElementById('li-msg');
+  const btn  = document.getElementById('li-btn');
+  msg.style.display='none'; btn.disabled=true; btn.textContent='Entrando...';
+  const { error } = await sb.auth.signInWithPassword({ email:mail, password:pass });
+  btn.disabled=false; btn.textContent='Entrar';
+  if (error){
+    msg.style.display='block'; msg.style.background='#FEE2E2'; msg.style.color='#991B1B';
+    msg.textContent = error.message==='Invalid login credentials'
+      ? 'E-mail ou senha não conferem.' : error.message;
+    return;
+  }
+  await iniciar();
+}
+document.getElementById('li-btn').onclick = entrar;
+document.getElementById('li-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') entrar(); });
+document.getElementById('sair').onclick = async ()=>{ await sb.auth.signOut(); location.reload(); };
+
+// ── TROCA DE SENHA ─────────────────────────────────────────────
+// Como o painel é um arquivo local, não existe endereço para o Supabase
+// redirecionar depois de um link de e-mail. Por isso a troca acontece aqui
+// dentro, já autenticado — sem link, sem redirecionamento, sem localhost.
+const modal = () => document.getElementById('modal-senha');
+document.getElementById('trocar').onclick = ()=>{
+  document.getElementById('ms-1').value=''; document.getElementById('ms-2').value='';
+  document.getElementById('ms-msg').style.display='none';
+  modal().style.display='flex'; document.getElementById('ms-1').focus();
+};
+document.getElementById('ms-cancel').onclick = ()=> modal().style.display='none';
+document.getElementById('ms-ok').onclick = async ()=>{
+  const a = document.getElementById('ms-1').value, b = document.getElementById('ms-2').value;
+  const m = document.getElementById('ms-msg');
+  const erro = t => { m.style.display='block'; m.style.background='#FEE2E2';
+                      m.style.color='#991B1B'; m.textContent=t; };
+  if (a.length < 8)  return erro('A senha precisa de pelo menos 8 caracteres.');
+  if (a !== b)       return erro('As duas senhas não são iguais.');
+  const btn = document.getElementById('ms-ok'); btn.disabled=true; btn.textContent='Salvando...';
+  const { error } = await sb.auth.updateUser({ password: a });
+  btn.disabled=false; btn.textContent='Salvar';
+  if (error) return erro(error.message);
+  modal().style.display='none';
+  toast('Senha trocada. Use a nova no próximo acesso.','ok');
+};
+
+// ═══════════════════════════════════════════════════════════════
+// CARGA INICIAL
+// ═══════════════════════════════════════════════════════════════
+async function iniciar(){
+  const { data:{ user } } = await sb.auth.getUser();
+  if (!user) return;
+  document.getElementById('login').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('who').textContent = user.email;
+
+  const [lojas, empresas, cats] = await Promise.all([
+    sb.from('ec_lojas').select('id,nome,empresa_id,cor').order('nome'),
+    sb.from('ec_empresas').select('id,nome').order('nome'),
+    sb.from('ec_categorias').select('id,nome,natureza,grupo_dre,entra_ebitda').order('nome'),
+  ]);
+  cache.lojas = lojas.data||[]; cache.empresas = empresas.data||[]; cache.categorias = cats.data||[];
+
+  preencherSelects();
+  await montarPeriodos();
+  await recarregar();
+}
+
+function preencherSelects(){
+  const optLojas = cache.lojas.map(l=>`<option value="${l.id}">${l.nome}</option>`).join('');
+  document.getElementById('f-loja').innerHTML = '<option value="">Todas as lojas</option>'+optLojas;
+  document.getElementById('i-loja').innerHTML = optLojas;
+  document.getElementById('a-loja').innerHTML = optLojas;
+  document.getElementById('d-loja').innerHTML = '<option value="">— rateia entre as lojas —</option>'+optLojas;
+  document.getElementById('d-empresa').innerHTML =
+    cache.empresas.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
+  document.getElementById('d-cat').innerHTML = cache.categorias
+    .map(c=>`<option value="${c.id}">${c.nome} · ${c.natureza}</option>`).join('');
+}
+
+async function montarPeriodos(){
+  const { data } = await sb.from('ec_pedidos').select('competencia').order('competencia');
+  const comps = [...new Set((data||[]).map(r=>r.competencia))].sort();
+  const de = document.getElementById('f-de'), ate = document.getElementById('f-ate');
+  if (!comps.length){ de.innerHTML = ate.innerHTML = '<option value="">—</option>'; return; }
+  const opts = comps.map(c=>`<option value="${c}">${compLabel(c)}</option>`).join('');
+  de.innerHTML = opts; ate.innerHTML = opts;
+  de.value = comps[0]; ate.value = comps[comps.length-1];
+  filtro.de = de.value; filtro.ate = ate.value;
+}
+
+document.getElementById('f-aplicar').onclick = ()=>{
+  filtro.loja = document.getElementById('f-loja').value;
+  filtro.de   = document.getElementById('f-de').value;
+  filtro.ate  = document.getElementById('f-ate').value;
+  recarregar();
+};
+
+async function recarregar(){
+  if (!filtro.de){
+    document.getElementById('f-info').textContent = 'Nenhum pedido no banco ainda — comece pela aba Importar dados.';
+    return;
+  }
+  const per = q => { q = q.gte('competencia',filtro.de).lte('competencia',filtro.ate);
+                     return filtro.loja ? q.eq('loja_id',filtro.loja) : q; };
+  const [v,d,m,dp,cu] = await Promise.all([
+    per(sb.from('ec_vw_vendas_mes').select('*')).order('competencia'),
+    per(sb.from('ec_vw_dre_mes').select('*')).order('competencia'),
+    per(sb.from('ec_vw_margem_produto').select('*')),
+    per(sb.from('ec_despesas').select('*,ec_categorias(nome,natureza),ec_lojas(nome)')).order('competencia'),
+    sb.from('ec_custos_unitarios').select('*').order('componente').order('tamanho'),
+  ]);
+  cache.vendas=v.data||[]; cache.dre=d.data||[]; cache.margem=m.data||[];
+  cache.despesas=dp.data||[]; cache.custos=cu.data||[];
+  document.getElementById('f-info').textContent =
+    `${cache.vendas.length} linhas · ${compLabel(filtro.de)} a ${compLabel(filtro.ate)}`;
+  renderTudo();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// NAVEGAÇÃO
+// ═══════════════════════════════════════════════════════════════
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('.page').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');
+  document.getElementById('p-'+b.dataset.p).classList.add('on');
+});
+
+function renderTudo(){
+  renderDash(); renderMensal(); renderDRE(); renderMargem();
+  renderDespesas(); renderCustos(); renderImpostos(); renderConf();
+}
+
+const soma = (arr,f) => arr.reduce((s,x)=>s+(Number(x[f])||0),0);
+
+// ── VISÃO GERAL ────────────────────────────────────────────────
+function renderDash(){
+  const d = cache.dre, v = cache.vendas;
+  const fat = soma(v,'faturamento_painel'), rec = soma(v,'receita_bruta');
+  const ped = soma(v,'pedidos_validos'), ebi = soma(d,'ebitda');
+  const cpv = soma(d,'cpv'), lb = soma(d,'lucro_bruto');
+  const mid = soma(d,'midia'), dop = soma(d,'despesas_operacionais');
+  document.getElementById('k-dash').innerHTML = [
+    ['Faturamento (padrão Shopee)', R(fat), 'inclui pago e depois cancelado',''],
+    ['Receita bruta', R(rec), 'sem os cancelados',''],
+    ['Pedidos', N(ped), 'válidos no período',''],
+    ['Ticket médio', R(ped? rec/ped : 0), 'por pedido',''],
+    ['CPV', R(cpv), 'custo de produção',''],
+    ['Lucro bruto', R(lb), rec? P(lb/rec*100)+' da receita':'', 'g'],
+    ['Mídia', R(mid), 'Shopee Ads',''],
+    ['Despesas operacionais', R(dop), 'fora a mídia',''],
+    ['EBITDA', R(ebi), rec? P(ebi/rec*100)+' da receita':'', ebi>=0?'g':'r'],
+  ].map(([lb2,vl,sb2,cls])=>
+    `<div class="kpi ${cls}"><div class="lb">${lb2}</div><div class="vl">${vl}</div><div class="sb">${sb2}</div></div>`
+  ).join('');
+
+  const meses = [...new Set(cache.dre.map(r=>r.competencia))].sort();
+  linha('c-fat','Faturamento', meses, meses.map(m=>soma(cache.dre.filter(r=>r.competencia===m),'receita_bruta')), '#1F6F78');
+  linha('c-ebitda','EBITDA', meses, meses.map(m=>soma(cache.dre.filter(r=>r.competencia===m),'ebitda')), '#E8622A');
+
+  const porLoja = {};
+  for (const r of cache.dre){
+    porLoja[r.loja] = porLoja[r.loja] || {loja:r.loja, receita:0, cpv:0, ebitda:0, ped:0};
+    porLoja[r.loja].receita += Number(r.receita_bruta)||0;
+    porLoja[r.loja].cpv     += Number(r.cpv)||0;
+    porLoja[r.loja].ebitda  += Number(r.ebitda)||0;
+    porLoja[r.loja].ped     += Number(r.pedidos_validos)||0;
+  }
+  const ls = Object.values(porLoja);
+  const totR = ls.reduce((s,x)=>s+x.receita,0);
+  document.getElementById('t-lojas').innerHTML = ls.length ? `
+    <thead><tr><th>Loja</th><th class="num">Receita</th><th class="num">Peso</th>
+      <th class="num">Pedidos</th><th class="num">CPV</th><th class="num">EBITDA</th><th class="num">Margem</th></tr></thead>
+    <tbody>${ls.map(x=>`<tr><td><b>${x.loja}</b></td>
+      <td class="num">${R(x.receita)}</td><td class="num">${totR?P(x.receita/totR*100):'—'}</td>
+      <td class="num">${N(x.ped)}</td><td class="num">${R(x.cpv)}</td>
+      <td class="num ${x.ebitda>=0?'pos':'neg'}">${R(x.ebitda)}</td>
+      <td class="num">${x.receita?P(x.ebitda/x.receita*100):'—'}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td>TOTAL</td><td class="num">${R(totR)}</td><td class="num">100,0%</td>
+      <td class="num">${N(ls.reduce((s,x)=>s+x.ped,0))}</td>
+      <td class="num">${R(ls.reduce((s,x)=>s+x.cpv,0))}</td>
+      <td class="num">${R(ls.reduce((s,x)=>s+x.ebitda,0))}</td>
+      <td class="num">${totR?P(ls.reduce((s,x)=>s+x.ebitda,0)/totR*100):'—'}</td></tr></tfoot>`
+    : '<tbody><tr><td class="vazio">Sem dados no período</td></tr></tbody>';
+}
+
+function linha(id, rotulo, labels, dados, cor){
+  const el = document.getElementById(id); if(!el) return;
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(el, {
+    type:'line',
+    data:{ labels: labels.map(compLabel),
+           datasets:[{label:rotulo, data:dados, borderColor:cor, backgroundColor:cor+'22',
+                      tension:.3, fill:true, pointRadius:3}]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{ y:{ ticks:{ callback:v=>'R$ '+(v/1000).toFixed(0)+'k' } } } }
+  });
+}
+
+// ── MENSAL ─────────────────────────────────────────────────────
+function renderMensal(){
+  const v = cache.vendas;
+  document.getElementById('t-mensal').innerHTML = v.length ? `
+    <thead><tr><th>Mês</th><th>Loja</th><th class="num">Faturamento</th><th class="num">Pedidos</th>
+      <th class="num">Cancelados</th><th class="num">Receita bruta</th><th class="num">Ticket</th>
+      <th class="num">No painel</th><th class="num">Dif.</th></tr></thead>
+    <tbody>${v.map(r=>{
+      const dif = r.dif_vs_painel;
+      const ok = dif!=null && Math.abs(dif) <= (Number(r.vendas_informado)||1)*0.005;
+      return `<tr><td><b>${compLabel(r.competencia)}</b></td><td>${r.loja}</td>
+        <td class="num">${R(r.faturamento_painel)}</td><td class="num">${N(r.pedidos_painel)}</td>
+        <td class="num">${N(r.cancelados)}</td><td class="num">${R(r.receita_bruta)}</td>
+        <td class="num">${R(r.ticket_medio)}</td>
+        <td class="num">${r.vendas_informado?R(r.vendas_informado):'—'}</td>
+        <td class="num ${dif==null?'':ok?'pos':'neg'}">${dif==null?'—':R(dif)}</td></tr>`;
+    }).join('')}</tbody>
+    <tfoot><tr><td colspan="2">TOTAL</td>
+      <td class="num">${R(soma(v,'faturamento_painel'))}</td>
+      <td class="num">${N(soma(v,'pedidos_painel'))}</td>
+      <td class="num">${N(soma(v,'cancelados'))}</td>
+      <td class="num">${R(soma(v,'receita_bruta'))}</td><td></td><td></td><td></td></tr></tfoot>`
+    : '<tbody><tr><td class="vazio">Sem dados</td></tr></tbody>';
+}
+
+function renderConf(){
+  const el = document.getElementById('conf-form');
+  if (!cache.vendas.length){ el.innerHTML='<p class="vazio">Sem meses para conferir.</p>'; return; }
+  el.innerHTML = `<div class="grid3">${cache.vendas.map(r=>`
+    <div style="background:var(--gray1);border:1px solid var(--gray2);border-radius:8px;padding:11px">
+      <div style="font-weight:700;font-size:11px;color:var(--navy);margin-bottom:8px">
+        ${r.loja} · ${compLabel(r.competencia)}</div>
+      <label>Vendas no painel R$</label>
+      <input type="number" step="0.01" value="${r.vendas_informado||''}"
+        id="cf-v-${r.loja_id}-${r.competencia}" style="margin-bottom:7px">
+      <label>Pedidos no painel</label>
+      <input type="number" value="${r.pedidos_informado||''}" id="cf-p-${r.loja_id}-${r.competencia}">
+    </div>`).join('')}</div>
+    <button class="btn" style="margin-top:12px" id="cf-save">Salvar conferência</button>`;
+  document.getElementById('cf-save').onclick = salvarConf;
+}
+async function salvarConf(){
+  const linhas = cache.vendas.map(r=>({
+    loja_id: r.loja_id, competencia: r.competencia,
+    vendas_painel: parseFloat(document.getElementById(`cf-v-${r.loja_id}-${r.competencia}`).value)||null,
+    pedidos_painel: parseInt(document.getElementById(`cf-p-${r.loja_id}-${r.competencia}`).value)||null,
+    visitantes: r.visitantes, conversao_pct: r.conversao_pct,
+  })).filter(x=>x.vendas_painel!=null || x.pedidos_painel!=null);
+  if (!linhas.length){ toast('Nada preenchido.'); return; }
+  const { error } = await sb.from('ec_metricas_canal').upsert(linhas, {onConflict:'loja_id,competencia'});
+  if (error) return toast('Erro: '+error.message,'er');
+  toast('Conferência salva.','ok'); recarregar();
+}
+
+// ── DRE ────────────────────────────────────────────────────────
+function renderDRE(){
+  const d = cache.dre;
+  document.getElementById('t-dre').innerHTML = d.length ? `
+    <thead><tr><th>Mês</th><th>Loja</th><th class="num">Receita</th><th class="num">Comissão</th>
+      <th class="num">Taxa serv.</th><th class="num">Imposto</th><th class="num">Rec. líquida</th>
+      <th class="num">CPV</th><th class="num">Lucro bruto</th><th class="num">Mídia</th>
+      <th class="num">Desp. oper.</th><th class="num">EBITDA</th><th class="num">Margem</th>
+      <th class="num">ROAS</th></tr></thead>
+    <tbody>${d.map(r=>`<tr>
+      <td><b>${compLabel(r.competencia)}</b></td><td>${r.loja}</td>
+      <td class="num">${R(r.receita_bruta)}</td><td class="num">${R(r.comissao)}</td>
+      <td class="num">${R(r.taxa_servico)}</td><td class="num">${R(r.imposto_venda)}</td>
+      <td class="num">${R(r.receita_liquida)}</td><td class="num">${R(r.cpv)}</td>
+      <td class="num">${R(r.lucro_bruto)}</td><td class="num">${R(r.midia)}</td>
+      <td class="num">${R(r.despesas_operacionais)}</td>
+      <td class="num ${Number(r.ebitda)>=0?'pos':'neg'}">${R(r.ebitda)}</td>
+      <td class="num">${P(r.margem_ebitda_pct)}</td><td class="num">${X(r.roas)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="2">TOTAL</td>
+      ${['receita_bruta','comissao','taxa_servico','imposto_venda','receita_liquida','cpv',
+         'lucro_bruto','midia','despesas_operacionais','ebitda']
+        .map(f=>`<td class="num">${R(soma(d,f))}</td>`).join('')}
+      <td class="num">${soma(d,'receita_bruta')?P(soma(d,'ebitda')/soma(d,'receita_bruta')*100):'—'}</td>
+      <td></td></tr></tfoot>`
+    : '<tbody><tr><td class="vazio">Sem dados</td></tr></tbody>';
+
+  const rec=soma(d,'receita_bruta');
+  const passos = [
+    ['Receita bruta', rec, ''],
+    ['− Comissão do marketplace', -soma(d,'comissao'),''],
+    ['− Taxa de serviço', -soma(d,'taxa_servico'),''],
+    ['− Impostos sobre venda', -soma(d,'imposto_venda'),''],
+    ['= Receita líquida', soma(d,'receita_liquida'),'sub'],
+    ['− CPV (produção, moldura, embalagem)', -soma(d,'cpv'),''],
+    ['= Lucro bruto', soma(d,'lucro_bruto'),'sub'],
+    ['− Mídia e anúncios', -soma(d,'midia'),''],
+    ['− Despesas operacionais', -soma(d,'despesas_operacionais'),''],
+    ['= EBITDA', soma(d,'ebitda'),'tot'],
+    ['− Despesas financeiras', -soma(d,'despesa_financeira'),''],
+    ['− Depreciação e amortização', -soma(d,'depreciacao'),''],
+    ['− Imposto sobre o lucro', -soma(d,'imposto_lucro'),''],
+    ['= Lucro líquido', soma(d,'lucro_liquido'),'tot'],
+  ];
+  document.getElementById('t-cascata').innerHTML = `
+    <thead><tr><th>Linha</th><th class="num">Valor</th><th class="num">% da receita</th></tr></thead>
+    <tbody>${passos.map(([l,vv,cl])=>`<tr style="${cl==='tot'?'background:var(--kpi);font-weight:700'
+      :cl==='sub'?'background:#F1F5F9;font-weight:700':''}">
+      <td>${l}</td><td class="num">${R(vv)}</td>
+      <td class="num">${rec?P(vv/rec*100):'—'}</td></tr>`).join('')}</tbody>`;
+}
+
+// ── MARGEM ─────────────────────────────────────────────────────
+function renderMargem(){
+  const acc = {};
+  for (const r of cache.margem){
+    const k = r.produto_nome+'|'+(r.tamanho||'')+'|'+(r.acabamento||'');
+    acc[k] = acc[k] || {nome:r.produto_nome, tam:r.tamanho, aca:r.acabamento,
+                        un:0, rec:0, cus:0, tax:0};
+    acc[k].un += Number(r.unidades)||0; acc[k].rec += Number(r.receita)||0;
+    acc[k].cus += Number(r.custo)||0;   acc[k].tax += Number(r.taxas_marketplace)||0;
+  }
+  const arr = Object.values(acc).sort((a,b)=>b.rec-a.rec).slice(0,60);
+  document.getElementById('t-margem').innerHTML = arr.length ? `
+    <thead><tr><th>Produto</th><th>Tam.</th><th>Acabamento</th><th class="num">Un.</th>
+      <th class="num">Receita</th><th class="num">Custo</th><th class="num">Taxas</th>
+      <th class="num">Margem contrib.</th><th class="num">Markup</th><th class="num">Margem %</th></tr></thead>
+    <tbody>${arr.map(x=>{
+      const mc = x.rec - x.cus - x.tax;
+      return `<tr><td style="max-width:320px">${x.nome}</td><td>${x.tam||'—'}</td>
+        <td>${x.aca||'—'}</td><td class="num">${N(x.un)}</td>
+        <td class="num">${R(x.rec)}</td>
+        <td class="num">${x.cus?R(x.cus):'<span style="color:var(--yellow)">sem custo</span>'}</td>
+        <td class="num">${R(x.tax)}</td>
+        <td class="num ${mc>=0?'pos':'neg'}">${R(mc)}</td>
+        <td class="num">${x.cus?X(x.rec/x.cus):'—'}</td>
+        <td class="num">${x.rec?P(mc/x.rec*100):'—'}</td></tr>`;
+    }).join('')}</tbody>`
+    : '<tbody><tr><td class="vazio">Sem dados. Se aparecer "sem custo", cadastre o tamanho na aba Custos.</td></tr></tbody>';
+}
+
+// ── DESPESAS ───────────────────────────────────────────────────
+document.getElementById('d-add').onclick = async ()=>{
+  const comp = document.getElementById('d-comp').value;
+  const valor = parseFloat(document.getElementById('d-valor').value);
+  const desc = document.getElementById('d-desc').value.trim();
+  if (!comp || !valor || !desc) return toast('Preencha competência, valor e descrição.','er');
+  const { error } = await sb.from('ec_despesas').insert({
+    empresa_id: +document.getElementById('d-empresa').value,
+    loja_id: document.getElementById('d-loja').value || null,
+    categoria_id: +document.getElementById('d-cat').value,
+    competencia: comp+'-01', descricao: desc, valor,
+    recorrente: document.getElementById('d-rec').checked,
+  });
+  if (error) return toast('Erro: '+error.message,'er');
+  document.getElementById('d-valor').value=''; document.getElementById('d-desc').value='';
+  toast('Despesa lançada.','ok'); recarregar();
+};
+
+function renderDespesas(){
+  const d = cache.despesas;
+  document.getElementById('t-despesas').innerHTML = d.length ? `
+    <thead><tr><th>Competência</th><th>Descrição</th><th>Categoria</th><th>Natureza</th>
+      <th>Loja</th><th class="num">Valor</th><th></th></tr></thead>
+    <tbody>${d.map(r=>`<tr>
+      <td>${compLabel(r.competencia)}</td><td>${r.descricao}</td>
+      <td>${r.ec_categorias?.nome||''}</td>
+      <td><span class="tag ${r.ec_categorias?.natureza==='fixa'?'tag-fix':'tag-var'}">${r.ec_categorias?.natureza||''}</span></td>
+      <td>${r.ec_lojas?.nome||'<i style="color:var(--gray3)">rateia</i>'}</td>
+      <td class="num">${R(r.valor)}</td>
+      <td><button class="btn btn-sm btn-red" onclick="apagarDespesa(${r.id})">Apagar</button></td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="5">TOTAL</td><td class="num">${R(soma(d,'valor'))}</td><td></td></tr></tfoot>`
+    : '<tbody><tr><td class="vazio">Nenhuma despesa lançada no período</td></tr></tbody>';
+}
+async function apagarDespesa(id){
+  if (!confirm('Apagar esta despesa?')) return;
+  const { error } = await sb.from('ec_despesas').delete().eq('id',id);
+  if (error) return toast('Erro: '+error.message,'er');
+  toast('Despesa apagada.','ok'); recarregar();
+}
+
+// ── CUSTOS ─────────────────────────────────────────────────────
+document.getElementById('c-add').onclick = async ()=>{
+  const comp = document.getElementById('c-comp').value;
+  const tam  = document.getElementById('c-tam').value;
+  const val  = parseFloat(document.getElementById('c-valor').value);
+  const vig  = document.getElementById('c-vig').value;
+  if (!val || !vig) return toast('Preencha valor e data de vigência.','er');
+  const fim = new Date(vig); fim.setDate(fim.getDate()-1);
+  await sb.from('ec_custos_unitarios')
+    .update({ vigencia_fim: fim.toISOString().slice(0,10) })
+    .eq('componente',comp).eq('tamanho',tam).is('vigencia_fim',null);
+  const { error } = await sb.from('ec_custos_unitarios')
+    .insert({ componente:comp, tamanho:tam, valor:val, vigencia_inicio:vig });
+  if (error) return toast('Erro: '+error.message,'er');
+  document.getElementById('c-valor').value='';
+  toast('Custo cadastrado. O anterior foi encerrado na véspera.','ok'); recarregar();
+};
+
+const NOME_COMP = {producao_quadro:'Produção do quadro', moldura_quadro:'Moldura (por quadro)',
+                   embalagem_kit:'Embalagem (por kit)'};
+function renderCustos(){
+  const c = cache.custos;
+  document.getElementById('t-custos').innerHTML = c.length ? `
+    <thead><tr><th>Componente</th><th>Tamanho</th><th class="num">Valor</th>
+      <th>Vale de</th><th>Até</th><th>Situação</th></tr></thead>
+    <tbody>${c.map(r=>`<tr>
+      <td>${NOME_COMP[r.componente]||r.componente}</td><td>${r.tamanho}</td>
+      <td class="num">${R(r.valor)}</td><td>${r.vigencia_inicio.split('-').reverse().join('/')}</td>
+      <td>${r.vigencia_fim? r.vigencia_fim.split('-').reverse().join('/') : '—'}</td>
+      <td>${r.vigencia_fim?'<span style="color:var(--gray3)">encerrado</span>'
+                          :'<span class="pos">vigente</span>'}</td></tr>`).join('')}</tbody>`
+    : '<tbody><tr><td class="vazio">Sem custos cadastrados</td></tr></tbody>';
+  simular();
+}
+
+['s-tam','s-qtd','s-mold','s-preco'].forEach(id=>
+  document.getElementById(id).addEventListener('input', simular));
+function simular(){
+  const tam = document.getElementById('s-tam').value;
+  const q   = parseInt(document.getElementById('s-qtd').value)||1;
+  const mold= document.getElementById('s-mold').value==='1';
+  const pr  = parseFloat(document.getElementById('s-preco').value)||0;
+  const vig = comp => { const r = cache.custos.find(x=>x.componente===comp && x.tamanho===tam && !x.vigencia_fim);
+                        return r? Number(r.valor) : null; };
+  const cp = vig('producao_quadro'), cm = vig('moldura_quadro'), ce = vig('embalagem_kit');
+  const out = document.getElementById('s-out');
+  if (cp==null || ce==null){ out.innerHTML =
+    '<div class="aviso aviso-w">Faltam custos vigentes para o tamanho '+tam+'.</div>'; return; }
+  const custo = q*(cp + (mold? (cm||0) : 0)) + ce;
+  // comissão Shopee 2026: 14% + taxa fixa por faixa
+  const fixa = pr<80?4 : pr<100?16 : pr<200?20 : 26;
+  const com  = pr*0.14 + fixa;
+  const mc = pr - custo - com;
+  out.innerHTML = `
+    <div class="twrap"><table>
+      <tbody>
+        <tr><td>Produção · ${q} × ${R(cp)}</td><td class="num">${R(q*cp)}</td></tr>
+        <tr><td>Moldura · ${mold? q+' × '+R(cm||0) : 'sem moldura'}</td><td class="num">${R(mold? q*(cm||0):0)}</td></tr>
+        <tr><td>Embalagem</td><td class="num">${R(ce)}</td></tr>
+        <tr style="background:#F1F5F9;font-weight:700"><td>Custo do kit</td><td class="num">${R(custo)}</td></tr>
+        <tr><td>Comissão Shopee estimada (14% + R$ ${fixa} fixos)</td><td class="num">${R(com)}</td></tr>
+        <tr style="background:var(--kpi);font-weight:700"><td>Margem de contribuição</td>
+            <td class="num ${mc>=0?'pos':'neg'}">${R(mc)}</td></tr>
+        <tr><td>Markup sobre o custo</td><td class="num">${X(pr/custo)}</td></tr>
+        <tr><td>Margem sobre o preço</td><td class="num">${P(mc/pr*100)}</td></tr>
+        <tr><td><b>ROAS de equilíbrio</b> — abaixo disso o anúncio dá prejuízo</td>
+            <td class="num"><b>${mc>0? X(pr/mc) : '—'}</b></td></tr>
+      </tbody></table></div>
+    <div class="aviso aviso-i" style="margin-top:10px">A comissão é estimada pela tabela da Shopee de 2026
+      e não considera imposto nem despesa fixa. O ROAS de equilíbrio sai do preço dividido pela margem.</div>`;
+}
+
+// ── IMPOSTOS ───────────────────────────────────────────────────
+async function renderImpostos(){
+  const { data } = await sb.from('ec_impostos').select('*,ec_empresas(nome)').order('empresa_id');
+  document.getElementById('t-imp').innerHTML = (data||[]).length ? `
+    <thead><tr><th>Empresa</th><th class="num">Alíquota</th><th>Vale de</th><th></th></tr></thead>
+    <tbody>${data.map(r=>`<tr><td>${r.ec_empresas?.nome}</td>
+      <td class="num"><input type="number" step="0.001" value="${r.aliquota_pct}"
+        id="imp-${r.id}" style="width:100px;text-align:right"></td>
+      <td>${r.vigencia_inicio.split('-').reverse().join('/')}</td>
+      <td><button class="btn btn-sm" onclick="salvarImposto(${r.id})">Salvar</button></td></tr>`).join('')}</tbody>`
+    : '';
+}
+async function salvarImposto(id){
+  const v = parseFloat(document.getElementById('imp-'+id).value);
+  const { error } = await sb.from('ec_impostos').update({aliquota_pct:v}).eq('id',id);
+  if (error) return toast('Erro: '+error.message,'er');
+  toast('Alíquota salva.','ok'); recarregar();
+}
+
+// ── ANÚNCIOS ───────────────────────────────────────────────────
+document.getElementById('a-add').onclick = async ()=>{
+  const comp = document.getElementById('a-comp').value;
+  if (!comp) return toast('Escolha a competência.','er');
+  const { error } = await sb.from('ec_ads_mensal').upsert({
+    loja_id: +document.getElementById('a-loja').value, competencia: comp+'-01',
+    investimento: parseFloat(document.getElementById('a-inv').value)||0,
+    vendas_atribuidas: parseFloat(document.getElementById('a-vend').value)||0,
+  }, {onConflict:'loja_id,competencia'});
+  if (error) return toast('Erro: '+error.message,'er');
+  toast('Anúncios salvos.','ok'); recarregar();
+};
+
+// ═══════════════════════════════════════════════════════════════
+// IMPORTAÇÃO E MIGRAÇÃO
+// ═══════════════════════════════════════════════════════════════
+function mesDeData(v){
+  if (v==null) return null;
+  if (v instanceof Date && !isNaN(v)) return {m:v.getUTCMonth(), a:v.getUTCFullYear()};
+  const s = String(v).trim();
+  if (!s || s==='-' || s.toLowerCase()==='nan') return null;
+  let g = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (g) return {m:+g[2]-1, a:+g[1]};
+  g = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (g) return {m:+g[2]-1, a:+g[3]};
+  const d = new Date(s);
+  return isNaN(d) ? null : {m:d.getUTCMonth(), a:d.getUTCFullYear()};
+}
+const compDe = o => o ? `${o.a}-${String(o.m+1).padStart(2,'0')}-01` : null;
+function parseTamanho(v){ v=String(v||'').replace('cm','');
+  for (const t of ['20x30','30x40','40x60']) if (v.includes(t)) return t; return null; }
+function parseMoldura(v){ v=String(v||'').toLowerCase();
+  if (v.includes('sem moldura')) return 'Sem Moldura';
+  if (v.includes('branca')) return 'Moldura Branca';
+  if (v.includes('madeira')) return 'Moldura Madeira';
+  if (v.includes('preta')) return 'Moldura Preta'; return null; }
+function parseQtdQuadros(nome){ const g=String(nome||'').match(/kit\s*(\d+)/i); return g? +g[1] : null; }
+function classifyTipo(nome){ const n=String(nome||'').toLowerCase();
+  if (n.includes('com nome')||n.includes('personaliz')) return 'Personalizado';
+  if (n.includes('kit')) return 'Kit'; return 'Avulso'; }
+
+// envia pedidos+itens em lotes
+async function enviarPedidos(pedidos, logId){
+  const LOTE = 400; let enviados = 0;
+  for (let i=0;i<pedidos.length;i+=LOTE){
+    const fatia = pedidos.slice(i,i+LOTE);
+    const { data:ps, error:e1 } = await sb.from('ec_pedidos')
+      .upsert(fatia.map(p=>({
+        loja_id:p.loja_id, id_externo:p.id_externo, status:p.status,
+        cancelado:p.cancelado, pago:p.pago, criado_em_mkt:p.criado_em_mkt,
+        pago_em:p.pago_em, competencia:p.competencia, uf:p.uf, comprador:p.comprador,
+      })), {onConflict:'loja_id,id_externo'})
+      .select('id,id_externo,loja_id');
+    if (e1) throw new Error('pedidos: '+e1.message);
+    const mapa = {}; ps.forEach(r=>mapa[r.loja_id+'|'+r.id_externo]=r.id);
+    const ids = ps.map(r=>r.id);
+    await sb.from('ec_pedido_itens').delete().in('pedido_id', ids);
+    const itens = [];
+    for (const p of fatia){
+      const pid = mapa[p.loja_id+'|'+p.id_externo]; if(!pid) continue;
+      for (const it of p.itens) itens.push({...it, pedido_id:pid});
+    }
+    for (let j=0;j<itens.length;j+=500){
+      const { error:e2 } = await sb.from('ec_pedido_itens').insert(itens.slice(j,j+500));
+      if (e2) throw new Error('itens: '+e2.message);
+    }
+    enviados += fatia.length;
+    if (logId) log(logId, `enviados ${enviados}/${pedidos.length} pedidos...`);
+  }
+  return enviados;
+}
+
+// ── migração do app antigo (localStorage) ──────────────────────
+function lerLocal(){
+  try { const s = localStorage.getItem('grupoint_v2'); return s? JSON.parse(s) : null; }
+  catch(e){ return null; }
+}
+function renderMigStatus(){
+  const st = lerLocal(); const el = document.getElementById('mig-status');
+  if (!st || !st.orders?.length){
+    el.innerHTML = '<div class="aviso aviso-w">Nenhum dado do app antigo encontrado neste navegador. '
+      + 'Abra esta página no mesmo navegador em que você usa o GrupoNT_App.html.</div>';
+    document.getElementById('mig-btn').disabled = true; return;
+  }
+  el.innerHTML = `<div class="aviso aviso-ok">Encontrei <b>${N(st.orders.length)}</b> pedidos válidos e
+    <b>${N((st.canceled||[]).length)}</b> cancelados no armazenamento deste navegador.</div>`;
+  document.getElementById('mig-btn').disabled = false;
+}
+document.getElementById('mig-btn').onclick = async ()=>{
+  const st = lerLocal(); if (!st) return;
+  const btn = document.getElementById('mig-btn'); btn.disabled=true; btn.textContent='Enviando...';
+  document.getElementById('mig-log').innerHTML='';
+  try {
+    const porLoja = {}; cache.lojas.forEach(l=>porLoja[l.nome]=l.id);
+    const agrup = {};
+    for (const o of [...(st.orders||[]), ...(st.canceled||[])]){
+      const lojaId = porLoja[o.loja];
+      if (!lojaId){ continue; }
+      const k = lojaId+'|'+o._id;
+      const mIdx = MESES.indexOf(o.mes);
+      const comp = mIdx>=0 ? `${ANO_HISTORICO}-${String(mIdx+1).padStart(2,'0')}-01` : null;
+      const g = o._id.match(/^(\d{2})(\d{2})(\d{2})/);
+      const criado = g ? `20${g[1]}-${g[2]}-${g[3]}T12:00:00Z` : null;
+      if (!agrup[k]) agrup[k] = {
+        loja_id: lojaId, id_externo: o._id, status: o.status,
+        cancelado: o.status === 'Cancelado',
+        pago: o.pago !== undefined ? !!o.pago : o.status !== 'Cancelado',
+        criado_em_mkt: criado, pago_em: null, competencia: comp,
+        uf: o.uf || null, comprador: o.comprador || null, itens: [],
+      };
+      agrup[k].itens.push({
+        produto_nome: o.produto || 'Sem nome', variacao: o.variacao || null,
+        tamanho: o.tamanho || null, acabamento: o.moldura || null, tipo: o.tipo || null,
+        qtd_quadros: parseQtdQuadros(o.produto),
+        qtd: o.qtd || 1, preco_unit: 0,
+        subtotal: o.totalGlobal || 0, comissao: o.comissao || 0,
+        taxa_servico: o.taxaServ || 0, repasse: o.repasse || 0,
+      });
+    }
+    const lista = Object.values(agrup);
+    log('mig-log', `${lista.length} pedidos agrupados. Subindo...`);
+    const n = await enviarPedidos(lista, 'mig-log');
+    log('mig-log', `✓ ${n} pedidos no banco.`, 'ok');
+    toast('Histórico enviado.','ok');
+    await montarPeriodos(); await recarregar();
+  } catch(err){
+    log('mig-log', '✗ '+err.message, 'er'); toast('Falhou: '+err.message,'er');
+  }
+  btn.disabled=false; btn.textContent='Enviar histórico local para o banco';
+};
+
+// ── importação de planilha ─────────────────────────────────────
+function lerXLSX(file){
+  return new Promise((res,rej)=>{
+    const r = new FileReader();
+    r.onload = e => { try {
+      const wb = XLSX.read(e.target.result,{type:'binary',cellDates:true});
+      res(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''}));
+    } catch(err){ rej(err); } };
+    r.readAsBinaryString(file);
+  });
+}
+document.getElementById('i-btn').onclick = async ()=>{
+  const files = document.getElementById('i-file').files;
+  const lojaId = +document.getElementById('i-loja').value;
+  if (!files.length) return toast('Escolha ao menos um arquivo.','er');
+  const btn = document.getElementById('i-btn'); btn.disabled=true; btn.textContent='Importando...';
+  document.getElementById('i-log').innerHTML='';
+  try {
+    for (const f of files){
+      log('i-log', `lendo ${f.name}...`);
+      const rows = await lerXLSX(f);
+      const agrup = {};
+      for (const row of rows){
+        const id = String(row['ID do pedido']||'').trim(); if (!id) continue;
+        const status = String(row['Status do pedido']||'');
+        const pagoRaw = String(row['Hora do pagamento do pedido']||'').trim();
+        const pago = pagoRaw!=='' && pagoRaw!=='-' && pagoRaw.toLowerCase()!=='nan';
+        const dp = mesDeData(row['Hora do pagamento do pedido']);
+        const dc = mesDeData(row['Data de criação do pedido']);
+        const qtd = parseFloat(row['Quantidade'])||0;
+        const sub = parseFloat(row['Subtotal do produto']);
+        const pac = parseFloat(row['Preço acordado']);
+        const fat = (!isNaN(sub) && sub>0) ? sub : (!isNaN(pac) ? pac*qtd : 0);
+        const variac = String(row['Nome da variação']||'');
+        const nome = String(row['Nome do Produto']||'');
+        if (!agrup[id]) agrup[id] = {
+          loja_id: lojaId, id_externo: id, status, cancelado: status==='Cancelado', pago,
+          criado_em_mkt: row['Data de criação do pedido'] ? new Date(row['Data de criação do pedido']).toISOString() : null,
+          pago_em: pago && row['Hora do pagamento do pedido']
+                   ? new Date(row['Hora do pagamento do pedido']).toISOString() : null,
+          competencia: compDe(dp||dc),
+          uf: String(row['UF']||'')||null,
+          comprador: String(row['Nome de usuário (comprador)']||'')||null,
+          itens: [],
+        };
+        agrup[id].itens.push({
+          produto_nome: nome || 'Sem nome', variacao: variac||null,
+          sku: String(row['Número de referência SKU']||'')||null,
+          tamanho: parseTamanho(variac), acabamento: parseMoldura(variac),
+          tipo: classifyTipo(nome), qtd_quadros: parseQtdQuadros(nome),
+          qtd, preco_unit: isNaN(pac)?0:pac, subtotal: fat,
+          comissao: parseFloat(row['Taxa de comissão líquida'])||0,
+          taxa_servico: parseFloat(row['Taxa de serviço líquida'])||0,
+          repasse: parseFloat(row['Total global'])||0,
+        });
+      }
+      const lista = Object.values(agrup);
+      const meses = [...new Set(lista.map(p=>p.competencia).filter(Boolean))].sort();
+      log('i-log', `${lista.length} pedidos · meses: ${meses.map(compLabel).join(', ')}`);
+      await enviarPedidos(lista, 'i-log');
+      log('i-log', `✓ ${f.name} importado.`, 'ok');
+    }
+    toast('Importação concluída.','ok');
+    await montarPeriodos(); await recarregar();
+  } catch(err){
+    log('i-log','✗ '+err.message,'er'); toast('Falhou: '+err.message,'er');
+  }
+  btn.disabled=false; btn.textContent='Importar';
+};
+
+// ═══════════════════════════════════════════════════════════════
+(async ()=>{
+  const { data:{ session } } = await sb.auth.getSession();
+  if (session) await iniciar();
+  renderMigStatus();
+})();
+</script>
+</body>
+</html>
