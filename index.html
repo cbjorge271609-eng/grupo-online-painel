@@ -136,6 +136,7 @@ tfoot td{background:var(--navy);color:#fff;font-weight:700;border:none}
   <button data-p="margem">Margem e markup</button>
   <button data-p="despesas">Despesas</button>
   <button data-p="custos">Custos de produção</button>
+  <button data-p="extrato">Extrato bancário</button>
   <button data-p="dados">Importar dados</button>
 </nav>
 
@@ -315,6 +316,44 @@ tfoot td{background:var(--navy);color:#fff;font-weight:700;border:none}
         <div><label>Preço de venda R$</label><input type="number" step="0.01" id="s-preco" value="159.90"></div>
       </div>
       <div id="s-out" style="margin-top:14px"></div>
+    </div>
+  </div>
+
+  <!-- ── EXTRATO ── -->
+  <div class="page" id="p-extrato">
+    <div class="sec">
+      <h2>Enviar extrato do banco <span class="hint">arquivo .OFX — reenviar o mesmo mês não duplica nada</span></h2>
+      <div class="grid3">
+        <div><label>Empresa dona da conta</label><select id="x-empresa"></select></div>
+        <div><label>Apelido da conta</label><input id="x-apelido" placeholder="Inter — NT Gráfica"></div>
+        <div><label>Arquivo .OFX</label><input type="file" id="x-file" accept=".ofx,.OFX"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn" id="x-ler" disabled>Ler arquivo</button>
+        <button class="btn" id="x-gravar" disabled>Gravar no painel</button>
+      </div>
+      <div class="aviso aviso-i" style="margin-top:12px">Cada lançamento é identificado pelo código que o
+        próprio banco gera. Se você mandar o mesmo arquivo de novo, ou um período que se sobrepõe,
+        os repetidos são descartados. <b>O número da conta não é guardado</b> — só o apelido que você der.</div>
+      <div id="x-prev" style="margin-top:14px"></div>
+    </div>
+
+    <div class="sec">
+      <h2>Conciliação <span class="hint">o que está sem categoria não entra no DRE</span></h2>
+      <div class="grid3" style="margin-bottom:10px">
+        <div><label>Mostrar</label><select id="x-filtro">
+          <option value="pendentes">Só o que falta classificar</option>
+          <option value="todos">Todos os lançamentos</option>
+          <option value="saidas">Só saídas</option>
+          <option value="entradas">Só entradas</option>
+          <option value="ignorados">Só ignorados</option></select></div>
+        <div><label>Competência</label><select id="x-comp"></select></div>
+        <div style="display:flex;align-items:end"><button class="btn" id="x-gerar">Atualizar despesas do DRE</button></div>
+      </div>
+      <div class="twrap"><table id="t-extrato"></table></div>
+      <div class="aviso aviso-i" style="margin-top:12px">Trocar a categoria de um lançamento já regrava a
+        despesa dele no DRE. <b>Ignorar</b> serve para o que não é do negócio e para as entradas —
+        o dinheiro que a Shopee repassa não é faturamento novo, o faturamento já vem dos pedidos.</div>
     </div>
   </div>
 
@@ -501,6 +540,10 @@ function preencherSelects(){
     cache.empresas.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
   document.getElementById('d-cat').innerHTML = cache.categorias
     .map(c=>`<option value="${c.id}">${c.nome} · ${c.natureza}</option>`).join('');
+  document.getElementById('x-empresa').innerHTML =
+    cache.empresas.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
+  const pend = cache.categorias.find(c=>c.nome==='Não classificado');
+  CAT_PENDENTE = pend ? pend.id : null;
 }
 
 async function montarPeriodos(){
@@ -516,6 +559,9 @@ async function montarPeriodos(){
   de.innerHTML = opts; ate.innerHTML = opts;
   de.value = comps[0]; ate.value = comps[comps.length-1];
   filtro.de = de.value; filtro.ate = ate.value;
+  document.getElementById('x-comp').innerHTML =
+    '<option value="">Todas as competências</option>' +
+    comps.slice().reverse().map(c=>`<option value="${c}">${compLabel(c)}</option>`).join('');
 }
 
 document.getElementById('f-aplicar').onclick = ()=>{
@@ -582,7 +628,7 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
 function renderTudo(){
   renderDash(); renderMensal(); renderDRE(); renderMargem();
   renderTop(); renderABC(); renderMix(); renderUF();
-  renderDespesas(); renderCustos(); renderImpostos(); renderConf();
+  renderDespesas(); renderCustos(); renderImpostos(); renderConf(); renderExtrato();
 }
 
 const soma = (arr,f) => arr.reduce((s,x)=>s+(Number(x[f])||0),0);
@@ -1155,6 +1201,251 @@ function simular(){
     <div class="aviso aviso-i" style="margin-top:10px">A comissão é estimada pela tabela da Shopee de 2026
       e não considera imposto nem despesa fixa. O ROAS de equilíbrio sai do preço dividido pela margem.</div>`;
 }
+
+// ── EXTRATO BANCÁRIO (.OFX) ────────────────────────────────────
+const slug  = s => String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'').slice(0,12) || 'banco';
+const esc   = s => String(s==null?'':s).replace(/[&<>"]/g, c =>
+                    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const dtBR  = s => s ? s.split('-').reverse().join('/') : '—';
+const kpi   = (t,v,sub) => `<div class="kpi"><div class="lb">${t}</div>
+                            <div class="vl">${v}</div>${sub?`<div class="sb">${sub}</div>`:''}</div>`;
+var CAT_PENDENTE = null;   // id da categoria "Não classificado"
+
+let ofx = null;   // {banco, ini, fim, arquivo, linhas:[...]}
+
+// O OFX é SGML, não XML: as tags não fecham. Lemos por expressão regular.
+function lerOFX(texto){
+  const tag = (bloco, t) => {
+    const m = bloco.match(new RegExp('<'+t+'>([^\\n<]*)'));
+    return m ? m[1].trim() : '';
+  };
+  const org  = tag(texto, 'ORG') || 'Banco';
+  const ini  = tag(texto, 'DTSTART').slice(0,8);
+  const fim  = tag(texto, 'DTEND').slice(0,8);
+  const dt   = s => s && s.length>=8 ? `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}` : null;
+
+  const blocos = texto.match(/<STMTTRN>[\s\S]*?<\/STMTTRN>/gi) || [];
+  const linhas = blocos.map(b => {
+    const valor = parseFloat(tag(b,'TRNAMT') || '0');
+    const fitid = tag(b,'FITID');
+    const nome  = tag(b,'NAME');
+    const memo  = tag(b,'MEMO');
+    return { data_mov: dt(tag(b,'DTPOSTED').slice(0,8)), valor,
+             descricao: nome || memo || '(sem descrição)', memo, documento: fitid };
+  }).filter(l => l.data_mov && l.documento);
+
+  return { banco: org, ini: dt(ini), fim: dt(fim), linhas };
+}
+
+// aplica as regras cadastradas; entrada de dinheiro já nasce ignorada
+function classificar(linha, regras, empresaId){
+  if (linha.valor > 0) return { categoria_id: null, ignorado: true };
+  const texto = (linha.descricao + ' ' + (linha.memo||'')).toUpperCase();
+  const cand = regras
+    .filter(r => r.ativa && (r.empresa_id == null || r.empresa_id === empresaId))
+    .filter(r => texto.includes(r.padrao.toUpperCase()))
+    .sort((a,b) => b.prioridade - a.prioridade);
+  return { categoria_id: cand.length ? cand[0].categoria_id : CAT_PENDENTE,
+           ignorado: false };
+}
+
+
+document.getElementById('x-file').onchange = e => {
+  document.getElementById('x-ler').disabled = !e.target.files.length;
+  document.getElementById('x-gravar').disabled = true;
+  document.getElementById('x-prev').innerHTML = '';
+};
+
+document.getElementById('x-ler').onclick = async ()=>{
+  const f = document.getElementById('x-file').files[0];
+  if (!f) return;
+  const empresaId = +document.getElementById('x-empresa').value;
+  let texto;
+  try { texto = await f.text(); }
+  catch(err){ return toast('Não consegui abrir o arquivo: '+err.message,'er'); }
+
+  try { ofx = lerOFX(texto); }
+  catch(err){ return toast('Esse arquivo não parece um OFX válido.','er'); }
+  if (!ofx.linhas.length) return toast('Não achei nenhum lançamento nesse arquivo.','er');
+  ofx.arquivo = f.name;
+
+  const { data: regras, error } = await sb.from('ec_regras_categoria').select('*');
+  if (error) return toast('Erro ao ler as regras: '+error.message,'er');
+
+  ofx.linhas.forEach(l => {
+    Object.assign(l, classificar(l, regras||[], empresaId));
+    l.hash_unico = `e${empresaId}:${slug(ofx.banco)}:${l.documento}`;
+  });
+
+  // o que já está no painel não entra de novo
+  const hashes = ofx.linhas.map(l => l.hash_unico);
+  const { data: jaTem } = await sb.from('ec_extrato_lancamentos')
+    .select('hash_unico').in('hash_unico', hashes);
+  const existentes = new Set((jaTem||[]).map(x => x.hash_unico));
+  ofx.linhas.forEach(l => l.repetido = existentes.has(l.hash_unico));
+
+  const novas = ofx.linhas.filter(l => !l.repetido);
+  const ent = novas.filter(l => l.valor > 0), sai = novas.filter(l => l.valor < 0);
+  const pend = novas.filter(l => l.categoria_id === CAT_PENDENTE && !l.ignorado);
+  const nomeCat = id => (cache.categorias.find(c=>c.id===id)||{}).nome || '—';
+
+  document.getElementById('x-prev').innerHTML = `
+    <div class="kpis">
+      ${kpi('Banco', ofx.banco)}
+      ${kpi('Período', dtBR(ofx.ini)+' a '+dtBR(ofx.fim))}
+      ${kpi('Lançamentos novos', novas.length, ofx.linhas.length-novas.length ?
+            (ofx.linhas.length-novas.length)+' já estavam no painel' : 'nenhum repetido')}
+      ${kpi('Entradas', R(ent.reduce((s,l)=>s+l.valor,0)), ent.length+' lançamentos')}
+      ${kpi('Saídas', R(sai.reduce((s,l)=>s+l.valor,0)), sai.length+' lançamentos')}
+      ${kpi('Sem categoria', pend.length, pend.length?'você classifica depois':'tudo reconhecido')}
+    </div>
+    <div class="twrap" style="margin-top:12px;max-height:340px;overflow:auto"><table>
+      <thead><tr><th>Data</th><th>Descrição</th><th class="num">Valor</th><th>Vai entrar como</th></tr></thead>
+      <tbody>${ofx.linhas.map(l=>`<tr${l.repetido?' style="opacity:.4"':''}>
+        <td>${dtBR(l.data_mov)}</td><td>${esc(l.descricao)}</td>
+        <td class="num ${l.valor<0?'neg':'pos'}">${R(l.valor)}</td>
+        <td>${l.repetido ? '<span class="tag">já estava no painel</span>'
+             : l.ignorado ? '<span class="tag">ignorado</span>'
+             : `<span class="tag">${esc(nomeCat(l.categoria_id))}</span>`}</td></tr>`).join('')}</tbody>
+    </table></div>`;
+  document.getElementById('x-gravar').disabled = !novas.length;
+  toast(`${novas.length} lançamento(s) prontos para gravar.`, novas.length?'ok':'er');
+};
+
+document.getElementById('x-gravar').onclick = async (e)=>{
+  if (!ofx) return;
+  const btn = e.target; btn.disabled = true; btn.textContent = 'Gravando…';
+  const empresaId = +document.getElementById('x-empresa').value;
+  const apelido = document.getElementById('x-apelido').value.trim() || ofx.banco;
+  const novas = ofx.linhas.filter(l => !l.repetido);
+
+  const { data: ext, error: e1 } = await sb.from('ec_extratos').insert({
+    empresa_id: empresaId, banco: ofx.banco, apelido_conta: apelido,
+    periodo_ini: ofx.ini, periodo_fim: ofx.fim, arquivo_nome: ofx.arquivo,
+  }).select();
+  if (e1){ btn.disabled=false; btn.textContent='Gravar no painel';
+           return toast('Erro ao criar o extrato: '+e1.message,'er'); }
+
+  const { error: e2 } = await sb.from('ec_extrato_lancamentos').upsert(
+    novas.map(l => ({ extrato_id: ext[0].id, data_mov: l.data_mov, descricao: l.descricao,
+                      documento: l.documento, valor: l.valor, hash_unico: l.hash_unico,
+                      categoria_id: l.ignorado ? null : l.categoria_id, ignorado: l.ignorado })),
+    { onConflict: 'hash_unico', ignoreDuplicates: true });
+  if (e2){ btn.disabled=false; btn.textContent='Gravar no painel';
+           return toast('Erro ao gravar os lançamentos: '+e2.message,'er'); }
+
+  await gerarDespesas(empresaId);
+  btn.textContent = 'Gravar no painel';
+  document.getElementById('x-file').value=''; document.getElementById('x-prev').innerHTML='';
+  ofx = null; document.getElementById('x-ler').disabled = true;
+  toast(`${novas.length} lançamento(s) gravados.`,'ok');
+  recarregar();
+};
+
+// transforma os lançamentos classificados em despesas do DRE
+async function gerarDespesas(empresaId){
+  const { data: lanc, error } = await sb.from('ec_extrato_lancamentos')
+    .select('id,data_mov,descricao,valor,categoria_id,ignorado')
+    .eq('ignorado', false).not('categoria_id','is',null).lt('valor', 0);
+  if (error) return toast('Erro ao ler os lançamentos: '+error.message,'er');
+
+  const { data: jaDesp } = await sb.from('ec_despesas')
+    .select('id,lancamento_id,categoria_id,valor').not('lancamento_id','is',null);
+  const porLanc = new Map((jaDesp||[]).map(d => [d.lancamento_id, d]));
+
+  const novas = [], corrigir = [];
+  for (const l of (lanc||[])){
+    const d = porLanc.get(l.id);
+    const linha = { empresa_id: empresaId, loja_id: null, categoria_id: l.categoria_id,
+                    competencia: l.data_mov.slice(0,8)+'01', data_evento: l.data_mov,
+                    descricao: l.descricao, valor: Math.abs(l.valor),
+                    recorrente: false, origem: 'extrato', lancamento_id: l.id };
+    if (!d) novas.push(linha);
+    else if (d.categoria_id !== l.categoria_id) corrigir.push({ id: d.id, categoria_id: l.categoria_id });
+  }
+  if (novas.length){
+    const { error: e3 } = await sb.from('ec_despesas').insert(novas);
+    if (e3) return toast('Erro ao gerar despesas: '+e3.message,'er');
+  }
+  for (const c of corrigir)
+    await sb.from('ec_despesas').update({ categoria_id: c.categoria_id }).eq('id', c.id);
+
+  // lançamento que virou "ignorado" ou perdeu a categoria não pode deixar despesa órfã
+  const vivos = new Set((lanc||[]).map(l => l.id));
+  const orfas = (jaDesp||[]).filter(d => !vivos.has(d.lancamento_id)).map(d => d.id);
+  if (orfas.length) await sb.from('ec_despesas').delete().in('id', orfas);
+
+  if (novas.length || corrigir.length || orfas.length)
+    toast(`DRE atualizado: ${novas.length} nova(s), ${corrigir.length} corrigida(s), ${orfas.length} removida(s).`,'ok');
+  return true;
+}
+
+document.getElementById('x-gerar').onclick = async ()=>{
+  await gerarDespesas(+document.getElementById('x-empresa').value);
+  recarregar();
+};
+document.getElementById('x-filtro').onchange = renderExtrato;
+document.getElementById('x-comp').onchange  = renderExtrato;
+
+async function renderExtrato(){
+  const comp = document.getElementById('x-comp').value;
+  let q = sb.from('ec_extrato_lancamentos')
+            .select('*,ec_categorias(nome,grupo_dre)')
+            .order('data_mov', {ascending:false}).limit(1000);
+  if (comp){
+    const fim = new Date(Date.UTC(+comp.slice(0,4), +comp.slice(5,7), 0)).toISOString().slice(0,10);
+    q = q.gte('data_mov', comp.slice(0,7)+'-01').lte('data_mov', fim);
+  }
+  const { data, error } = await q;
+  if (error) return toast('Erro ao ler o extrato: '+error.message,'er');
+
+  const f = document.getElementById('x-filtro').value;
+  const lin = (data||[]).filter(l =>
+      f==='todos'      ? true
+    : f==='saidas'     ? l.valor < 0
+    : f==='entradas'   ? l.valor > 0
+    : f==='ignorados'  ? l.ignorado
+    : (!l.ignorado && (l.categoria_id === CAT_PENDENTE || l.categoria_id == null)));
+
+  const opts = id => cache.categorias.map(c =>
+      `<option value="${c.id}"${c.id===id?' selected':''}>${esc(c.nome)}</option>`).join('');
+
+  document.getElementById('t-extrato').innerHTML = lin.length ? `
+    <thead><tr><th>Data</th><th>Descrição</th><th class="num">Valor</th>
+      <th>Categoria</th><th>No DRE</th><th></th></tr></thead>
+    <tbody>${lin.map(l=>`<tr${l.ignorado?' style="opacity:.5"':''}>
+      <td>${dtBR(l.data_mov)}</td>
+      <td>${esc(l.descricao)}<div class="hint">doc ${esc(l.documento||'')}</div></td>
+      <td class="num ${l.valor<0?'neg':'pos'}">${R(l.valor)}</td>
+      <td>${l.ignorado ? '<span class="tag">ignorado</span>'
+           : `<select onchange="mudarCategoria(${l.id}, this.value)" style="min-width:200px">
+                <option value="">— sem categoria —</option>${opts(l.categoria_id)}</select>`}</td>
+      <td>${l.ignorado || l.valor > 0 ? '<span class="hint">fora</span>'
+           : l.ec_categorias ? `<span class="hint">${esc(l.ec_categorias.grupo_dre)}</span>` : '<span class="hint">—</span>'}</td>
+      <td><button class="btn-mini" onclick="alternarIgnorado(${l.id},${!l.ignorado})">
+            ${l.ignorado?'Voltar':'Ignorar'}</button></td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="2">TOTAL DA SELEÇÃO</td>
+      <td class="num">${R(lin.reduce((s,l)=>s+Number(l.valor),0))}</td><td colspan="3"></td></tr></tfoot>`
+    : '<tbody><tr><td class="vazio">Nada aqui. Envie um extrato .OFX acima.</td></tr></tbody>';
+}
+
+async function mudarCategoria(id, cat){
+  const { error } = await sb.from('ec_extrato_lancamentos')
+    .update({ categoria_id: cat ? Number(cat) : null, conciliado: !!cat }).eq('id', id);
+  if (error) return toast('Erro: '+error.message,'er');
+  await gerarDespesas(+document.getElementById('x-empresa').value);
+  renderExtrato(); recarregar();
+}
+
+async function alternarIgnorado(id, ignorado){
+  const patch = ignorado ? { ignorado: true, categoria_id: null, conciliado: false }
+                         : { ignorado: false, categoria_id: CAT_PENDENTE };
+  const { error } = await sb.from('ec_extrato_lancamentos').update(patch).eq('id', id);
+  if (error) return toast('Erro: '+error.message,'er');
+  await gerarDespesas(+document.getElementById('x-empresa').value);
+  renderExtrato(); recarregar();
+}
+
 
 // ── IMPOSTOS ───────────────────────────────────────────────────
 async function renderImpostos(){
