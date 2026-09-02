@@ -176,7 +176,7 @@ tfoot td{background:var(--navy);color:#fff;font-weight:700;border:none}
   <!-- ── MARGEM ── -->
   <div class="page" id="p-margem">
     <div class="sec">
-      <h2>Margem e markup por produto <span class="hint">markup = preço ÷ custo de produção</span></h2>
+      <h2>Margem e markup por produto <span class="hint" id="margem-info">markup = preço ÷ custo de produção</span></h2>
       <div class="twrap"><table id="t-margem"></table></div>
     </div>
   </div>
@@ -420,7 +420,11 @@ function preencherSelects(){
 }
 
 async function montarPeriodos(){
-  const { data } = await sb.from('ec_pedidos').select('competencia').order('competencia');
+  // Lê a view resumida, não a tabela de pedidos: o Supabase devolve no máximo
+  // 1.000 linhas por consulta e a tabela já passou disso — o filtro perdia os
+  // meses mais recentes em silêncio.
+  const { data, error } = await sb.from('ec_vw_competencias').select('competencia');
+  if (error) toast('Erro ao ler os meses: '+error.message,'er');
   const comps = [...new Set((data||[]).map(r=>r.competencia))].sort();
   const de = document.getElementById('f-de'), ate = document.getElementById('f-ate');
   if (!comps.length){ de.innerHTML = ate.innerHTML = '<option value="">—</option>'; return; }
@@ -444,13 +448,18 @@ async function recarregar(){
   }
   const per = q => { q = q.gte('competencia',filtro.de).lte('competencia',filtro.ate);
                      return filtro.loja ? q.eq('loja_id',filtro.loja) : q; };
+  // A margem por produto vem agregada pelo servidor. Se viesse linha a linha
+  // seriam mais de 2.000 registros e a consulta seria cortada nas primeiras mil.
   const [v,d,m,dp,cu] = await Promise.all([
     per(sb.from('ec_vw_vendas_mes').select('*')).order('competencia'),
     per(sb.from('ec_vw_dre_mes').select('*')).order('competencia'),
-    per(sb.from('ec_vw_margem_produto').select('*')),
+    sb.rpc('ec_margem_periodo', {p_de: filtro.de, p_ate: filtro.ate,
+                                 p_loja: filtro.loja ? Number(filtro.loja) : null}),
     per(sb.from('ec_despesas').select('*,ec_categorias(nome,natureza),ec_lojas(nome)')).order('competencia'),
     sb.from('ec_custos_unitarios').select('*').order('componente').order('tamanho'),
   ]);
+  for (const [nome,r] of [['vendas',v],['DRE',d],['margem',m],['despesas',dp],['custos',cu]])
+    if (r.error) toast(`Erro ao ler ${nome}: ${r.error.message}`,'er');
   cache.vendas=v.data||[]; cache.dre=d.data||[]; cache.margem=m.data||[];
   cache.despesas=dp.data||[]; cache.custos=cu.data||[];
   document.getElementById('f-info').textContent =
@@ -647,15 +656,11 @@ function renderDRE(){
 
 // ── MARGEM ─────────────────────────────────────────────────────
 function renderMargem(){
-  const acc = {};
-  for (const r of cache.margem){
-    const k = r.produto_nome+'|'+(r.tamanho||'')+'|'+(r.acabamento||'');
-    acc[k] = acc[k] || {nome:r.produto_nome, tam:r.tamanho, aca:r.acabamento,
-                        un:0, rec:0, cus:0, tax:0};
-    acc[k].un += Number(r.unidades)||0; acc[k].rec += Number(r.receita)||0;
-    acc[k].cus += Number(r.custo)||0;   acc[k].tax += Number(r.taxas_marketplace)||0;
-  }
-  const arr = Object.values(acc).sort((a,b)=>b.rec-a.rec).slice(0,60);
+  const arr = (cache.margem||[]).map(r=>({
+    nome:r.produto_nome, tam:r.tamanho, aca:r.acabamento,
+    un:Number(r.unidades)||0, rec:Number(r.receita)||0,
+    cus:Number(r.custo)||0,   tax:Number(r.taxas)||0,
+  }));
   document.getElementById('t-margem').innerHTML = arr.length ? `
     <thead><tr><th>Produto</th><th>Tam.</th><th>Acabamento</th><th class="num">Un.</th>
       <th class="num">Receita</th><th class="num">Custo</th><th class="num">Taxas</th>
@@ -672,6 +677,11 @@ function renderMargem(){
         <td class="num">${x.rec?P(mc/x.rec*100):'—'}</td></tr>`;
     }).join('')}</tbody>`
     : '<tbody><tr><td class="vazio">Sem dados. Se aparecer "sem custo", cadastre o tamanho na aba Custos.</td></tr></tbody>';
+  const info = document.getElementById('margem-info');
+  if (info) info.textContent = arr.length
+    ? `${arr.length} produtos · markup = preço ÷ custo de produção`
+      + (arr.length >= 300 ? ' · mostrando os 300 de maior receita' : '')
+    : 'markup = preço ÷ custo de produção';
 }
 
 // ── DESPESAS ───────────────────────────────────────────────────
