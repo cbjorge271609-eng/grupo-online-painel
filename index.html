@@ -7,135 +7,219 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&display=swap">
 <style>
+/* ═══════════════════════════════════════════════════════════════
+   Painel Grupo Online — Gestão à vista
+   Barlow Condensed (títulos, rótulos) + Barlow (texto e dados)
+   ═══════════════════════════════════════════════════════════════ */
 :root{
-  --navy:#14484F; --teal:#1F6F78; --escuro:#0F3A40;
-  --kpi:#EDF5F5; --entrada:#FFF8DB; --alerta:#FBE9E7; --ok:#E1F2DE;
-  --red:#B91C1C; --green:#166534; --yellow:#92400E; --gray1:#F8FAFC;
-  --gray2:#E2E8F0; --gray3:#64748B; --txt:#1F2937;
+  --nav:#132C3D;   --nav-2:#1E4056;  --nav-txt:#93AEC1; --sinal:#F2A03D;
+  --ground:#EEF1F3; --surface:#FFFFFF; --surface-2:#F5F8F9;
+  --line:#DCE3E7;  --line-2:#C3CFD6;
+  --ink:#132C3D;   --ink-2:#41586A;  --ink-3:#78909F;
+  --accent:#155E75; --accent-2:#0E4457; --accent-soft:#E2EEF2;
+  --pos:#15703F;   --neg:#B02418;    --warn:#9A5A05;
+  --pos-soft:#E4F1E9; --neg-soft:#FBE9E6; --warn-soft:#FBEFD9;
+  --sombra:0 1px 2px rgba(19,44,61,.05);
+  --r:5px; --r-sm:4px; --nav-w:232px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --nav:#0A1822;   --nav-2:#16303F;  --nav-txt:#8AA6B8; --sinal:#F2A03D;
+    --ground:#0D1A22; --surface:#132330; --surface-2:#182C3A;
+    --line:#22394A;  --line-2:#31526A;
+    --ink:#E8F0F5;   --ink-2:#B4C8D6;  --ink-3:#7E97A8;
+    --accent:#4FA8C7; --accent-2:#78C4DD; --accent-soft:#152F3D;
+    --pos:#5DC287;   --neg:#EE8577;    --warn:#DFA458;
+    --pos-soft:#14291D; --neg-soft:#2D1815; --warn-soft:#2B2110;
+    --sombra:0 1px 2px rgba(0,0,0,.35);
+    color-scheme:dark;
+  }
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Arial,Helvetica,sans-serif;background:var(--gray1);color:var(--txt);font-size:13px}
-button{font-family:inherit;cursor:pointer}
-.btn{padding:8px 14px;border:none;border-radius:6px;background:var(--teal);color:#fff;font-size:12px;font-weight:700}
-.btn-sec{background:#fff;color:var(--gray3);border:1px solid #CBD5E1}
-.btn-mini{padding:4px 8px;font-size:11px;border-radius:5px;border:1px solid #CBD5E1;background:#fff;color:var(--gray3);font-weight:600;margin-right:4px}
-.pin{width:90px;padding:5px 6px;border:1px solid #CBD5E1;border-radius:5px;font-size:12px;text-align:right}
-.pin.mudou{border-color:var(--teal);background:#ECFDF5;font-weight:700}
+html{-webkit-text-size-adjust:100%}
+body{font-family:Barlow,"Segoe UI",Helvetica,Arial,sans-serif;background:var(--ground);
+  color:var(--ink);font-size:13.5px;line-height:1.45;font-variant-numeric:tabular-nums}
+h1,h2,h3,.cond{font-family:"Barlow Condensed",Barlow,Helvetica,sans-serif;font-weight:700;
+  text-transform:uppercase;letter-spacing:.6px;text-wrap:balance}
 
-.barras{display:block}
-.b-cab,.b-lin{display:grid;grid-template-columns:1fr 200px 110px 110px 110px 110px;
-  gap:12px;align-items:center;padding:9px 10px}
-.b-cab{font-size:10px;font-weight:700;color:var(--gray3);text-transform:uppercase;
-  letter-spacing:.3px;border-bottom:1px solid var(--gray2)}
-.b-lin{border-bottom:1px solid #F1F5F9}
-.b-lin:hover{background:var(--kpi)}
-.b-nome{font-weight:600;color:var(--navy);display:flex;align-items:center;gap:7px}
-.b-track{background:#EDF2F4;border-radius:4px;height:14px;overflow:hidden}
-.b-fill{background:var(--teal);height:100%;border-radius:0 4px 4px 0;min-width:3px}
-.b-val{font-weight:700;color:var(--navy)}
-.d-sobe{color:var(--red);font-weight:700}
-.d-cai{color:var(--green);font-weight:700}
-.d-igual,.d-novo{color:var(--gray3);font-weight:600}
-@media(max-width:900px){
-  .b-cab{display:none}
-  .b-lin{grid-template-columns:1fr 1fr;gap:6px}
-  .b-track{grid-column:1/-1}
-}
-.tag{display:inline-block;padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700;background:#F1F5F9;color:var(--gray3)}
-.btn:hover{filter:brightness(1.1)} .btn:disabled{opacity:.5;cursor:not-allowed}
-.btn-sm{padding:5px 10px;font-size:11px}
-.btn-ghost{background:#fff;color:var(--navy);border:1.5px solid var(--gray2)}
-.btn-red{background:var(--red)}
-input,select,textarea{font-family:inherit;font-size:12px;padding:7px 9px;border:1.5px solid var(--gray2);
-  border-radius:6px;width:100%;background:#fff}
-input:focus,select:focus{outline:2px solid var(--teal);outline-offset:-1px}
-label{font-size:11px;font-weight:700;color:var(--gray3);display:block;margin-bottom:4px}
+/* ── LOGIN ─────────────────────────────────────────────────── */
+#login{min-height:100vh;display:grid;place-items:center;padding:24px;background:var(--nav)}
+#login .card{background:var(--surface);border-radius:6px;border-top:5px solid var(--sinal);
+  padding:36px 32px;width:100%;max-width:390px;box-shadow:0 16px 50px rgba(0,0,0,.3)}
+#login h1{font-size:26px;color:var(--ink)}
+#login p.sub{font-size:12.5px;color:var(--ink-3);margin:6px 0 26px;text-transform:none}
+#login .fld{margin-bottom:15px}
+#login .msg{font-size:12px;margin-top:14px;min-height:17px}
 
-/* ── LOGIN ── */
-#login{position:fixed;inset:0;background:var(--navy);display:flex;align-items:center;
-  justify-content:center;z-index:100;padding:20px}
-#login .card{background:#fff;border-radius:12px;padding:32px;width:100%;max-width:380px}
-#login h1{font-size:19px;color:var(--navy);margin-bottom:4px}
-#login p.sub{font-size:12px;color:var(--gray3);margin-bottom:22px}
-#login .fld{margin-bottom:14px}
-#login .msg{margin-top:14px;font-size:12px;padding:10px;border-radius:6px;display:none}
+/* ── ESTRUTURA ─────────────────────────────────────────────── */
+#app{display:none;min-height:100vh}
+.shell{display:grid;grid-template-columns:var(--nav-w) 1fr;min-height:100vh}
+aside{background:var(--nav);display:flex;flex-direction:column;position:sticky;top:0;
+  height:100vh;overflow-y:auto}
+.marca{padding:19px 20px 17px;border-bottom:3px solid var(--sinal)}
+.marca b{display:block;font-family:"Barlow Condensed",sans-serif;font-size:21px;font-weight:700;
+  color:#fff;text-transform:uppercase;letter-spacing:.9px}
+.marca span{display:block;font-size:10px;color:var(--nav-txt);margin-top:2px;line-height:1.4}
+nav{flex:1;padding:8px 0}
+.g-tit{font-family:"Barlow Condensed",sans-serif;font-size:11.5px;font-weight:700;
+  letter-spacing:1.5px;text-transform:uppercase;color:var(--sinal);padding:17px 20px 6px}
+nav button{display:block;width:100%;text-align:left;padding:7px 20px;border:none;
+  background:none;border-left:3px solid transparent;font-family:inherit;font-size:13px;
+  color:var(--nav-txt);cursor:pointer;line-height:1.35}
+nav button:hover{background:var(--nav-2);color:#fff}
+nav button.on{background:var(--nav-2);color:#fff;font-weight:600;border-left-color:var(--sinal)}
+nav button:focus-visible,.btn:focus-visible,input:focus-visible,select:focus-visible,
+.btn-mini:focus-visible{outline:2px solid var(--sinal);outline-offset:-2px}
+.rodape-nav{padding:14px 20px;border-top:1px solid var(--nav-2);font-size:11px;color:var(--nav-txt)}
+.rodape-nav .who{display:block;color:#fff;font-weight:500;margin-bottom:9px;
+  overflow:hidden;text-overflow:ellipsis}
+.menu-btn{display:none}
+.conteudo{min-width:0;display:flex;flex-direction:column}
 
-/* ── LAYOUT ── */
-#app{display:none}
-header{background:var(--navy);color:#fff;padding:0 18px;display:flex;align-items:center;
-  gap:16px;height:52px;position:sticky;top:0;z-index:20}
-header h1{font-size:15px;font-weight:700}
+/* ── CABEÇALHO E FILTROS ───────────────────────────────────── */
+header{background:var(--nav);color:#fff;padding:15px 26px;display:flex;align-items:center;
+  gap:14px;flex-wrap:wrap;position:sticky;top:0;z-index:20}
+header h1{font-size:23px;color:#fff}
 header .sp{flex:1}
-header .who{font-size:11px;opacity:.85}
-nav{background:var(--escuro);padding:0 18px;display:flex;gap:2px;overflow-x:auto;position:sticky;top:52px;z-index:19}
-nav button{background:none;border:none;color:#B7CDD0;padding:11px 14px;font-size:12px;
-  font-weight:700;border-bottom:3px solid transparent;white-space:nowrap}
-nav button.on{color:#fff;border-bottom-color:#5FBDC7}
-.filtros{background:#fff;border-bottom:1px solid var(--gray2);padding:10px 18px;
-  display:flex;gap:10px;align-items:end;flex-wrap:wrap;position:sticky;top:93px;z-index:18}
-.filtros .f{min-width:150px}
-main{padding:18px}
-.page{display:none} .page.on{display:block}
-.sec{background:#fff;border-radius:10px;padding:16px;margin-bottom:16px;border:1px solid var(--gray2)}
-.sec h2{font-size:14px;color:var(--navy);margin-bottom:12px;display:flex;align-items:center;gap:8px}
-.sec h2 .hint{font-size:11px;font-weight:400;color:var(--gray3)}
+header .who{font-size:11.5px;color:var(--nav-txt)}
+.filtros{background:var(--surface);border-bottom:1px solid var(--line);padding:11px 26px;
+  display:flex;gap:13px;align-items:flex-end;flex-wrap:wrap}
+.filtros .f{display:flex;flex-direction:column}
+main{padding:20px 26px 50px;max-width:1560px;width:100%}
 
-/* ── KPIs ── */
-.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
-.kpi{background:var(--kpi);border-radius:8px;padding:13px;border:1px solid var(--gray2)}
-.kpi .lb{font-size:10px;font-weight:700;color:var(--gray3);text-transform:uppercase;letter-spacing:.3px}
-.kpi .vl{font-size:20px;font-weight:700;color:var(--navy);margin:5px 0 2px}
-.kpi .sb{font-size:10px;color:var(--gray3)}
-.kpi.g .vl{color:var(--green)} .kpi.r .vl{color:var(--red)}
+/* ── SEÇÕES ────────────────────────────────────────────────── */
+.page{display:none}
+.page.on{display:block}
+.sec{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+  margin-bottom:16px;box-shadow:var(--sombra);overflow:hidden}
+.sec h2{background:var(--accent-soft);color:var(--accent);font-size:15px;padding:9px 18px;
+  border-bottom:1px solid var(--line);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.sec h2 .hint{font-family:Barlow,sans-serif;font-size:11.5px;font-weight:400;
+  text-transform:none;letter-spacing:0;color:var(--ink-3)}
+.sec>*:not(h2){margin-left:18px;margin-right:18px}
+.sec>*:not(h2):first-child{margin-top:18px}
+.sec>*:not(h2):last-child{margin-bottom:18px}
+.hint{font-size:11.5px;color:var(--ink-3)}
+.grid2{display:grid;grid-template-columns:1.45fr 1fr;gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(212px,1fr));gap:14px}
 
-/* ── TABELAS ── */
-.twrap{overflow-x:auto;border:1px solid var(--gray2);border-radius:8px}
-table{width:100%;border-collapse:collapse;font-size:12px;background:#fff}
-th{background:var(--teal);color:#fff;padding:9px 10px;text-align:left;font-size:11px;white-space:nowrap}
-td{padding:8px 10px;border-top:1px solid var(--gray2)}
-tbody tr:nth-child(even){background:#FCFDFD}
-.num{text-align:right;font-variant-numeric:tabular-nums}
-tfoot td{background:var(--navy);color:#fff;font-weight:700;border:none}
-.pos{color:var(--green);font-weight:700} .neg{color:var(--red);font-weight:700}
-.vazio{text-align:center;padding:30px;color:var(--gray3)}
+/* ── INDICADORES ───────────────────────────────────────────── */
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-top:4px solid var(--accent);
+  border-radius:var(--r-sm);padding:14px 16px}
+.kpi .lb{font-family:"Barlow Condensed",sans-serif;font-size:12px;font-weight:700;
+  color:var(--ink-3);text-transform:uppercase;letter-spacing:1.1px}
+.kpi .vl{font-size:25px;font-weight:700;color:var(--ink);margin:4px 0 2px;
+  letter-spacing:-.6px;line-height:1.12}
+.kpi .sb{font-size:11px;color:var(--ink-3);line-height:1.4}
+.kpi.g{border-top-color:var(--pos)} .kpi.g .vl{color:var(--pos)}
+.kpi.r{border-top-color:var(--neg)} .kpi.r .vl{color:var(--neg)}
 
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.grid3{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
-@media(max-width:800px){.grid2{grid-template-columns:1fr}}
+/* ── TABELAS ───────────────────────────────────────────────── */
+.twrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r-sm)}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{background:var(--surface-2);color:var(--ink-3);font-family:"Barlow Condensed",sans-serif;
+  font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.1px;text-align:left;
+  padding:8px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:9px 12px;border-bottom:1px solid var(--line);color:var(--ink-2)}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:var(--surface-2)}
+tfoot td{background:var(--surface-2);font-weight:700;color:var(--ink);
+  border-top:2px solid var(--line-2);border-bottom:none}
+.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.vazio{padding:28px;text-align:center;color:var(--ink-3);font-size:12.5px}
+.pos{color:var(--pos);font-weight:600}
+.neg{color:var(--neg);font-weight:600}
 
+/* ── CONTROLES ─────────────────────────────────────────────── */
+label{display:block;font-family:"Barlow Condensed",sans-serif;font-size:11.5px;font-weight:700;
+  color:var(--ink-3);text-transform:uppercase;letter-spacing:1.1px;margin-bottom:3px}
+input,select,textarea{font-family:inherit;font-size:12.5px;padding:7px 10px;
+  border:1px solid var(--line-2);border-radius:var(--r-sm);width:100%;
+  background:var(--surface);color:var(--ink)}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);outline:none;
+  box-shadow:0 0 0 3px var(--accent-soft)}
+select{cursor:pointer}
+input[type=checkbox]{width:auto}
+.btn{padding:8px 16px;border:none;border-radius:var(--r-sm);background:var(--accent);color:#fff;
+  font-family:"Barlow Condensed",sans-serif;font-size:14px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.9px;cursor:pointer;white-space:nowrap;transition:background .12s}
+.btn:hover{background:var(--accent-2)}
+.btn:disabled{opacity:.45;cursor:default}
+.btn-sm{padding:6px 12px;font-size:12.5px}
+.btn-sec,.btn-ghost{background:var(--surface);color:var(--ink-2);border:1px solid var(--line-2)}
+.btn-sec:hover,.btn-ghost:hover{background:var(--surface-2);color:var(--ink)}
+.btn-red{background:var(--neg)}
+.btn-red:hover{background:#8E1D13}
+.btn-mini{padding:4px 10px;font-size:11px;border-radius:3px;border:1px solid var(--line-2);
+  background:var(--surface);color:var(--ink-2);font-family:inherit;font-weight:600;
+  cursor:pointer;margin-right:4px}
+.btn-mini:hover{background:var(--surface-2);color:var(--ink)}
+.pin{width:92px;padding:6px 9px;text-align:right}
+.pin.mudou{border-color:var(--accent);background:var(--accent-soft);font-weight:700}
 
+/* ── SINALIZAÇÕES ──────────────────────────────────────────── */
+.tag{display:inline-block;padding:1px 8px;border-radius:3px;font-family:"Barlow Condensed",sans-serif;
+  font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;
+  background:var(--surface-2);color:var(--ink-3);white-space:nowrap}
+.tag-fix{background:var(--accent-soft);color:var(--accent)}
+.tag-var{background:var(--warn-soft);color:var(--warn)}
+.aviso{padding:11px 15px;border-radius:var(--r-sm);font-size:12px;line-height:1.6;
+  border-left:4px solid currentColor}
+.aviso-i{background:var(--accent-soft);color:var(--accent)}
+.aviso-w{background:var(--warn-soft);color:var(--warn)}
+.aviso-ok{background:var(--pos-soft);color:var(--pos)}
+#toast{position:fixed;right:22px;bottom:22px;z-index:100;display:flex;flex-direction:column;
+  gap:8px;max-width:400px}
+#toast div{padding:12px 17px;border-radius:var(--r-sm);font-size:12.5px;color:#fff;
+  background:var(--nav);box-shadow:0 8px 26px rgba(19,44,61,.3)}
+#toast div.ok{background:var(--pos)}
+#toast div.er{background:var(--neg)}
+.log{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;background:var(--surface-2);
+  border:1px solid var(--line);border-radius:var(--r-sm);padding:12px;max-height:230px;
+  overflow:auto;white-space:pre-wrap;color:var(--ink-2)}
+.log .ok{color:var(--pos)}
+
+/* ── GRÁFICOS E BARRAS ─────────────────────────────────────── */
+.chart{height:290px;position:relative}
 .barras{display:block}
-.b-cab,.b-lin{display:grid;grid-template-columns:1fr 200px 110px 110px 110px 110px;
-  gap:12px;align-items:center;padding:9px 10px}
-.b-cab{font-size:10px;font-weight:700;color:var(--gray3);text-transform:uppercase;
-  letter-spacing:.3px;border-bottom:1px solid var(--gray2)}
-.b-lin{border-bottom:1px solid #F1F5F9}
-.b-lin:hover{background:var(--kpi)}
-.b-nome{font-weight:600;color:var(--navy);display:flex;align-items:center;gap:7px}
-.b-track{background:#EDF2F4;border-radius:4px;height:14px;overflow:hidden}
-.b-fill{background:var(--teal);height:100%;border-radius:0 4px 4px 0;min-width:3px}
-.b-val{font-weight:700;color:var(--navy)}
-.d-sobe{color:var(--red);font-weight:700}
-.d-cai{color:var(--green);font-weight:700}
-.d-igual,.d-novo{color:var(--gray3);font-weight:600}
-@media(max-width:900px){
+.b-cab,.b-lin{display:grid;grid-template-columns:minmax(180px,1fr) 150px 112px 118px 116px 104px;
+  gap:13px;align-items:center;padding:9px 2px}
+.b-cab{font-family:"Barlow Condensed",sans-serif;font-size:12px;font-weight:700;
+  color:var(--ink-3);text-transform:uppercase;letter-spacing:1.1px;
+  border-bottom:1px solid var(--line)}
+.b-lin{border-bottom:1px solid var(--line)}
+.b-lin:last-child{border-bottom:none}
+.b-lin:hover{background:var(--surface-2)}
+.b-nome{font-weight:600;color:var(--ink);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.b-track{background:var(--surface-2);border-radius:2px;height:15px;overflow:hidden}
+.b-fill{background:var(--accent);height:100%;min-width:3px}
+.b-val{font-weight:700;color:var(--ink)}
+.d-sobe{color:var(--neg);font-weight:700}
+.d-cai{color:var(--pos);font-weight:700}
+.d-igual,.d-novo{color:var(--ink-3);font-weight:600}
+
+/* ── TELAS ESTREITAS ───────────────────────────────────────── */
+@media(max-width:1050px){
+  .shell{grid-template-columns:1fr}
+  aside{position:fixed;left:0;top:0;width:var(--nav-w);z-index:40;
+    transform:translateX(-100%);transition:transform .2s;box-shadow:0 0 50px rgba(0,0,0,.35)}
+  aside.aberta{transform:none}
+  .menu-btn{display:inline-flex}
+  header{padding:12px 16px}
+  header h1{font-size:19px}
+  .filtros,main{padding-left:16px;padding-right:16px}
+  .grid2{grid-template-columns:1fr}
   .b-cab{display:none}
-  .b-lin{grid-template-columns:1fr 1fr;gap:6px}
+  .b-lin{grid-template-columns:1fr auto;gap:6px}
   .b-track{grid-column:1/-1}
 }
-.tag{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700}
-.tag-fix{background:#E0E7FF;color:#3730A3} .tag-var{background:#FEF3C7;color:var(--yellow)}
-.aviso{padding:11px 13px;border-radius:8px;font-size:12px;margin-bottom:12px;line-height:1.5}
-.aviso-i{background:#EFF6FF;border:1px solid #BFDBFE;color:#1E40AF}
-.aviso-w{background:var(--alerta);border:1px solid #F59E0B;color:var(--yellow)}
-.aviso-ok{background:var(--ok);border:1px solid #86EFAC;color:var(--green)}
-#toast{position:fixed;bottom:20px;right:20px;background:var(--navy);color:#fff;padding:12px 18px;
-  border-radius:8px;font-size:12px;z-index:200;display:none;max-width:320px}
-.log{background:#0F172A;color:#94A3B8;font-family:monospace;font-size:11px;padding:12px;
-  border-radius:6px;max-height:220px;overflow-y:auto;line-height:1.6}
-.log .ok{color:#4ADE80} .log .er{color:#F87171}
-.chart{height:230px}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
 <body>
@@ -157,37 +241,53 @@ tfoot td{background:var(--navy);color:#fff;font-weight:700;border:none}
 
 <!-- ══════════ APP ══════════ -->
 <div id="app">
-<header>
-  <h1>Painel Grupo Online</h1>
-  <span class="sp"></span>
-  <span class="who" id="who"></span>
-  <button class="btn btn-sm btn-ghost" id="trocar">Trocar senha</button>
-  <button class="btn btn-sm btn-ghost" id="sair">Sair</button>
-</header>
+<div class="shell">
 
-<nav>
-  <button data-p="dash" class="on">Visão geral</button>
-  <button data-p="mensal">Mensal</button>
-  <button data-p="top">Top Produtos</button>
-  <button data-p="abc">Curva ABC</button>
-  <button data-p="mix">Mix de Vendas</button>
-  <button data-p="uf">Estados</button>
-  <button data-p="dre">DRE e EBITDA</button>
-  <button data-p="margem">Margem e markup</button>
-  <button data-p="despesas">Despesas</button>
-  <button data-p="custos">Custos de produção</button>
-  <button data-p="extrato">Extrato bancário</button>
-  <button data-p="cc">Entre empresas</button>
-  <button data-p="dados">Importar dados</button>
-</nav>
+<aside id="lateral">
+  <div class="marca"><b>Grupo Online</b>
+    <span>Amo Brotinhos · Rotina Kids · Decor Baby</span></div>
+  <nav>
+    <div class="g-tit">Resumo</div>
+    <button data-p="dash" class="on">Visão geral</button>
+    <button data-p="mensal">Mês a mês</button>
+    <div class="g-tit">Análise de produto</div>
+    <button data-p="top">Top produtos</button>
+    <button data-p="abc">Curva ABC</button>
+    <button data-p="mix">Mix de vendas</button>
+    <button data-p="uf">Estados</button>
+    <div class="g-tit">Financeiro</div>
+    <button data-p="dre">DRE e EBITDA</button>
+    <button data-p="margem">Margem e markup</button>
+    <button data-p="despesas">Despesas</button>
+    <button data-p="comparar">Comparar períodos</button>
+    <button data-p="cc">Entre empresas</button>
+    <div class="g-tit">Cadastros</div>
+    <button data-p="custos">Insumos e custos</button>
+    <button data-p="classif">Classificações</button>
+    <div class="g-tit">Entrada de dados</div>
+    <button data-p="extrato">Extrato bancário</button>
+    <button data-p="dados">Importar vendas</button>
+  </nav>
+  <div class="rodape-nav">
+    <span class="who" id="who"></span>
+    <button class="btn btn-sm btn-ghost" id="trocar">Trocar senha</button>
+    <button class="btn btn-sm btn-ghost" id="sair">Sair</button>
+  </div>
+</aside>
+
+<div class="conteudo">
+<header>
+  <button class="btn btn-sm btn-ghost menu-btn" id="abrir-menu">Menu</button>
+  <h1 id="titulo-pag">Visão geral</h1>
+  <span class="sp"></span>
+  <span class="who" id="f-info"></span>
+</header>
 
 <div class="filtros">
   <div class="f"><label>Loja</label><select id="f-loja"></select></div>
   <div class="f"><label>De</label><select id="f-de"></select></div>
   <div class="f"><label>Até</label><select id="f-ate"></select></div>
   <button class="btn btn-sm" id="f-aplicar">Aplicar</button>
-  <span style="flex:1"></span>
-  <span style="font-size:11px;color:var(--gray3)" id="f-info"></span>
 </div>
 
 <main>
@@ -499,7 +599,48 @@ tfoot td{background:var(--navy);color:#fff;font-weight:700;border:none}
     </div>
     <div class="sec"><h2>Alíquota de imposto sobre a receita</h2><div class="twrap"><table id="t-imp"></table></div></div>
   </div>
+  <!-- ── COMPARAR PERÍODOS ── -->
+  <div class="page" id="p-comparar">
+    <div class="sec">
+      <h2>Escolha os dois meses <span class="hint">útil para comparar meses de faturamento parecido</span></h2>
+      <div class="grid3">
+        <div><label>Mês A</label><select id="cp-a"></select></div>
+        <div><label>Mês B</label><select id="cp-b"></select></div>
+        <div style="display:flex;align-items:end"><button class="btn" id="cp-ver">Comparar</button></div>
+      </div>
+    </div>
+    <div id="cp-saida"></div>
+  </div>
+
+  <!-- ── CLASSIFICAÇÕES ── -->
+  <div class="page" id="p-classif">
+    <div class="sec">
+      <h2>Criar classificação <span class="hint">quanto mais específica, melhor a leitura do resultado</span></h2>
+      <div class="grid3">
+        <div><label>Nome</label><input id="cl-nome" placeholder="Embalagem de presente"></div>
+        <div><label>Natureza</label><select id="cl-nat">
+          <option value="fixa">Fixa — repete todo mês</option>
+          <option value="variavel">Variável — acompanha a venda</option></select></div>
+        <div><label>Onde entra no resultado</label><select id="cl-grupo"></select></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+        <button class="btn" id="cl-add">Criar classificação</button>
+        <span class="hint" id="cl-explica"></span>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h2>Classificações cadastradas</h2>
+      <div class="twrap"><table id="t-classif"></table></div>
+      <div class="aviso aviso-w" style="margin-top:14px">Mudar <b>onde entra no resultado</b> muda o DRE
+        de todos os meses que já usam essa classificação. Renomear é seguro; trocar o grupo, não.
+        Classificação em uso não pode ser apagada — desça as despesas para outra antes.</div>
+    </div>
+  </div>
+
 </main>
+</div>
+</div>
 </div>
 <div id="modal-senha" style="position:fixed;inset:0;background:rgba(15,58,64,.75);z-index:150;
      display:none;align-items:center;justify-content:center;padding:20px">
@@ -634,11 +775,16 @@ function preencherSelects(){
   document.getElementById('d-empresa').innerHTML =
     cache.empresas.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
   document.getElementById('d-cat').innerHTML = cache.categorias
-    .map(c=>`<option value="${c.id}">${c.nome} · ${c.natureza}</option>`).join('');
+    .map(c=>`<option value="${c.id}">${c.nome} · ${natLabel(c.natureza)}</option>`).join('');
   document.getElementById('x-empresa').innerHTML =
     cache.empresas.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
   const pend = cache.categorias.find(c=>c.nome==='Não classificado');
   CAT_PENDENTE = pend ? pend.id : null;
+  const gsel = document.getElementById('cl-grupo');
+  if (gsel && !gsel.options.length){
+    montarSelectGrupo(gsel, 'despesa_operacional');
+    document.getElementById('cl-explica').textContent = grupoInfo('despesa_operacional')[3];
+  }
 }
 
 async function montarPeriodos(){
@@ -657,6 +803,10 @@ async function montarPeriodos(){
   document.getElementById('x-comp').innerHTML =
     '<option value="">Todas as competências</option>' +
     comps.slice().reverse().map(c=>`<option value="${c}">${compLabel(c)}</option>`).join('');
+  const opcM = comps.slice().reverse().map(c=>`<option value="${c}">${compLabel(c)}</option>`).join('');
+  const ca = document.getElementById('cp-a'), cb = document.getElementById('cp-b');
+  ca.innerHTML = opcM; cb.innerHTML = opcM;
+  if (comps.length > 1){ ca.value = comps[0]; cb.value = comps[comps.length-1]; }
 }
 
 document.getElementById('f-aplicar').onclick = ()=>{
@@ -718,12 +868,18 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.page').forEach(x=>x.classList.remove('on'));
   b.classList.add('on');
   document.getElementById('p-'+b.dataset.p).classList.add('on');
+  document.getElementById('titulo-pag').textContent = b.textContent.trim();
+  document.getElementById('lateral').classList.remove('aberta');
+  if (b.dataset.p === 'classif') renderClassif();
+  window.scrollTo({top:0});
 });
+document.getElementById('abrir-menu').onclick = ()=>
+  document.getElementById('lateral').classList.toggle('aberta');
 
 function renderTudo(){
   renderDash(); renderMensal(); renderDRE(); renderMargem();
   renderTop(); renderABC(); renderMix(); renderUF();
-  renderDespesas(); renderCustos(); renderImpostos(); renderConf(); renderExtrato(); renderCC(); renderGastos();
+  renderDespesas(); renderCustos(); renderImpostos(); renderConf(); renderExtrato(); renderCC(); renderGastos(); renderClassif();
 }
 
 const soma = (arr,f) => arr.reduce((s,x)=>s+(Number(x[f])||0),0);
@@ -1080,7 +1236,7 @@ function renderDespesas(){
     <tbody>${d.map(r=>`<tr>
       <td>${compLabel(r.competencia)}</td><td>${esc(r.descricao)}</td>
       <td>${esc(r.ec_categorias?.nome||'')}</td>
-      <td><span class="tag ${r.ec_categorias?.natureza==='fixa'?'tag-fix':'tag-var'}">${r.ec_categorias?.natureza||''}</span></td>
+      <td><span class="tag ${r.ec_categorias?.natureza==='fixa'?'tag-fix':'tag-var'}">${natLabel(r.ec_categorias?.natureza)}</span></td>
       <td>${r.ec_lojas?.nome||'<i style="color:var(--gray3)">rateia</i>'}</td>
       <td>${r.loja_id ? '<span class="tag">só a loja</span>'
            : `<select onchange="mudarEscopo(${r.id}, this.value)" style="min-width:150px">
@@ -1102,7 +1258,7 @@ function editarDespesa(id){
   editandoId = id;
   document.getElementById('e-desc').textContent = r.descricao + ' · ' + R(r.valor);
   document.getElementById('e-cat').innerHTML = cache.categorias
-    .map(c=>`<option value="${c.id}"${c.id===r.categoria_id?' selected':''}>${esc(c.nome)} · ${c.natureza}</option>`).join('');
+    .map(c=>`<option value="${c.id}"${c.id===r.categoria_id?' selected':''}>${esc(c.nome)} · ${natLabel(c.natureza)}</option>`).join('');
   document.getElementById('e-loja').innerHTML = '<option value="">— rateia —</option>' +
     cache.lojas.map(l=>`<option value="${l.id}"${l.id===r.loja_id?' selected':''}>${esc(l.nome)}</option>`).join('');
   document.getElementById('e-escopo').value = r.escopo === 'grupo' ? 'grupo' : 'empresa';
@@ -1161,6 +1317,7 @@ async function apagarDespesa(id){
 const TAMANHOS  = ['20x30','30x40','40x60'];
 const NOME_APL  = {por_quadro:'por quadro', por_kit:'por kit'};
 const NOME_COND = {sempre:'sempre', com_moldura:'só com moldura', sem_moldura:'só sem moldura'};
+const natLabel = n => n === 'variavel' ? 'variável' : (n || '');
 
 const primeiroDoMes = () => { const d=new Date(); return new Date(Date.UTC(d.getFullYear(),d.getMonth(),1))
                                                     .toISOString().slice(0,10); };
@@ -1405,7 +1562,7 @@ async function renderGastos(){
             receita ? P(total/receita*100) + ' da receita' : '')}
       ${kpi('Maior categoria', esc(maior.categoria),
             R(maior.valor) + ' · ' + P(maior.valor/total*100) + ' do total')}
-      ${kpi('Contra o período anterior',
+      ${kpi('Contra o anterior',
             varTotal === null ? '—' : (varTotal > 0 ? '+' : '') + P(varTotal),
             totalAnt ? 'eram ' + R(totalAnt) : 'sem período anterior')}
       ${kpi('Sobra depois delas', R(receita - total),
@@ -1421,7 +1578,7 @@ async function renderGastos(){
       ${oper.map(r => `
         <div class="b-lin" title="${r.lancamentos} lançamento(s) no período">
           <div class="b-nome">${esc(r.categoria)}
-            <span class="tag ${r.natureza==='fixa'?'tag-fix':'tag-var'}">${r.natureza}</span></div>
+            <span class="tag ${r.natureza==='fixa'?'tag-fix':'tag-var'}">${natLabel(r.natureza)}</span></div>
           <div class="b-track"><div class="b-fill" style="width:${(r.valor/maxVal*100).toFixed(1)}%"></div></div>
           <div class="num b-val">${R(r.valor)}</div>
           <div class="num">${P(r.valor/total*100)}</div>
@@ -1450,6 +1607,216 @@ async function renderGastos(){
       oportunidade: uma despesa pode crescer em reais e ainda assim estar mais barata, se a venda
       cresceu mais. A comparação é contra um período do mesmo tamanho imediatamente anterior.</div>`;
 }
+
+// ── COMPARAR PERÍODOS ──────────────────────────────────────────
+document.getElementById('cp-ver').onclick = compararPeriodos;
+
+async function compararPeriodos(){
+  const a = document.getElementById('cp-a').value;
+  const b = document.getElementById('cp-b').value;
+  const out = document.getElementById('cp-saida');
+  if (!a || !b) return toast('Escolha os dois meses.','er');
+  if (a === b)  return toast('Escolha dois meses diferentes.','er');
+
+  const loja = filtro.loja ? Number(filtro.loja) : null;
+  const arg  = m => ({p_de:m, p_ate:m, p_loja:loja});
+  const dre  = m => { let q = sb.from('ec_vw_dre_mes').select('*').eq('competencia', m);
+                      return loja ? q.eq('loja_id', loja) : q; };
+
+  const [ca, cb, da, db] = await Promise.all([
+    sb.rpc('ec_despesas_categoria', arg(a)), sb.rpc('ec_despesas_categoria', arg(b)),
+    dre(a), dre(b),
+  ]);
+  for (const [n,r] of [['despesas de A',ca],['despesas de B',cb],['DRE de A',da],['DRE de B',db]])
+    if (r.error) return toast(`Erro nas ${n}: ${r.error.message}`,'er');
+
+  const resumo = d => {
+    const l = d.data || [];
+    const rec = soma(l,'receita_bruta'), ebi = soma(l,'ebitda');
+    return { receita: rec, cpv: soma(l,'cpv'), ebitda: ebi,
+             pedidos: soma(l,'pedidos_validos'),
+             margem: rec ? ebi/rec*100 : null };
+  };
+  const ra = resumo(da), rb = resumo(db);
+
+  // junta as categorias dos dois meses numa lista só
+  const mapa = new Map();
+  const por = (linhas, chave) => (linhas||[]).forEach(r => {
+    const k = r.categoria_id;
+    if (!mapa.has(k)) mapa.set(k, {nome:r.categoria, grupo:r.grupo_dre, natureza:r.natureza,
+                                   ebitda:r.entra_ebitda, a:0, b:0});
+    mapa.get(k)[chave] = +r.valor;
+  });
+  por(ca.data,'a'); por(cb.data,'b');
+
+  const oper = [...mapa.values()].filter(x => x.grupo === 'despesa_operacional')
+                                 .sort((x,y) => (y.a+y.b) - (x.a+x.b));
+  const fora = [...mapa.values()].filter(x => x.grupo !== 'despesa_operacional' && (x.a || x.b))
+                                 .sort((x,y) => (y.a+y.b) - (x.a+x.b));
+  const totA = oper.reduce((s,x) => s+x.a, 0), totB = oper.reduce((s,x) => s+x.b, 0);
+
+  const dif = (va, vb) => {
+    const d = vb - va;
+    if (Math.abs(d) < 0.005) return '<span class="d-igual">igual</span>';
+    if (!va) return '<span class="d-novo">só em ' + compLabel(b) + '</span>';
+    const p = d / va * 100;
+    return `<span class="${d>0?'d-sobe':'d-cai'}">${d>0?'▲':'▼'} ${R(Math.abs(d))} · ${P(Math.abs(p))}</span>`;
+  };
+  const pct = (v, rec) => rec ? P(v/rec*100) : '—';
+  const cmp = (va, vb, inverso) => {
+    if (va == null || vb == null) return '';
+    const bom = inverso ? vb < va : vb > va;
+    return Math.abs(vb-va) < 0.005 ? '' : (bom ? ' class="pos"' : ' class="neg"');
+  };
+
+  out.innerHTML = `
+    <div class="sec">
+      <h2>${compLabel(a)} contra ${compLabel(b)}</h2>
+      <div class="twrap"><table>
+        <thead><tr><th>Indicador</th><th class="num">${compLabel(a)}</th>
+          <th class="num">${compLabel(b)}</th><th class="num">Diferença</th></tr></thead>
+        <tbody>
+          <tr><td>Receita bruta</td><td class="num">${R(ra.receita)}</td>
+              <td class="num"${cmp(ra.receita,rb.receita)}>${R(rb.receita)}</td>
+              <td class="num">${dif(ra.receita, rb.receita)}</td></tr>
+          <tr><td>Pedidos válidos</td><td class="num">${N(ra.pedidos)}</td>
+              <td class="num"${cmp(ra.pedidos,rb.pedidos)}>${N(rb.pedidos)}</td>
+              <td class="num">${ra.pedidos? dif(ra.pedidos, rb.pedidos):'—'}</td></tr>
+          <tr><td>Custo de produção</td><td class="num">${R(ra.cpv)}</td>
+              <td class="num">${R(rb.cpv)}</td><td class="num">${dif(ra.cpv, rb.cpv)}</td></tr>
+          <tr><td>Despesas operacionais</td><td class="num">${R(totA)}</td>
+              <td class="num">${R(totB)}</td><td class="num">${dif(totA, totB)}</td></tr>
+          <tr style="font-weight:700"><td>EBITDA</td><td class="num">${R(ra.ebitda)}</td>
+              <td class="num"${cmp(ra.ebitda,rb.ebitda)}>${R(rb.ebitda)}</td>
+              <td class="num">${dif(ra.ebitda, rb.ebitda)}</td></tr>
+          <tr><td>Margem EBITDA</td><td class="num">${P(ra.margem)}</td>
+              <td class="num"${cmp(ra.margem,rb.margem)}>${P(rb.margem)}</td>
+              <td class="num">${ra.margem!=null && rb.margem!=null
+                 ? (rb.margem>=ra.margem?'+':'−') + P(Math.abs(rb.margem-ra.margem)).replace('%',' pontos')
+                 : '—'}</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="sec">
+      <h2>Despesa por classificação <span class="hint">a coluna % da receita mostra o que ficou mais caro de verdade</span></h2>
+      <div class="twrap"><table>
+        <thead><tr><th>Classificação</th>
+          <th class="num">${compLabel(a)}</th><th class="num">% receita</th>
+          <th class="num">${compLabel(b)}</th><th class="num">% receita</th>
+          <th class="num">Diferença</th></tr></thead>
+        <tbody>${oper.map(x => `<tr>
+          <td><b>${esc(x.nome)}</b> <span class="tag ${x.natureza==='fixa'?'tag-fix':'tag-var'}">${natLabel(x.natureza)}</span></td>
+          <td class="num">${R(x.a)}</td><td class="num">${pct(x.a, ra.receita)}</td>
+          <td class="num">${R(x.b)}</td><td class="num">${pct(x.b, rb.receita)}</td>
+          <td class="num">${dif(x.a, x.b)}</td></tr>`).join('')}</tbody>
+        <tfoot><tr><td>TOTAL OPERACIONAL</td>
+          <td class="num">${R(totA)}</td><td class="num">${pct(totA, ra.receita)}</td>
+          <td class="num">${R(totB)}</td><td class="num">${pct(totB, rb.receita)}</td>
+          <td class="num">${dif(totA, totB)}</td></tr></tfoot>
+      </table></div>
+    </div>
+
+    ${fora.length ? `<div class="sec"><h2>Fora do EBITDA</h2>
+      <div class="twrap"><table>
+        <thead><tr><th>Classificação</th><th class="num">${compLabel(a)}</th>
+          <th class="num">${compLabel(b)}</th><th class="num">Diferença</th></tr></thead>
+        <tbody>${fora.map(x => `<tr><td>${esc(x.nome)}</td>
+          <td class="num">${R(x.a)}</td><td class="num">${R(x.b)}</td>
+          <td class="num">${dif(x.a, x.b)}</td></tr>`).join('')}</tbody>
+      </table></div></div>` : ''}`;
+}
+
+// ── CLASSIFICAÇÕES ─────────────────────────────────────────────
+const GRUPOS = [
+  ['despesa_operacional','Despesa da operação',      true,  'Entra no EBITDA e reduz o lucro do mês.'],
+  ['cpv',                'Custo do produto vendido', true,  'Entra no CPV. Cuidado: o custo dos quadros já vem dos insumos.'],
+  ['deducao_venda',      'Dedução da venda',         true,  'Comissão e imposto sobre a venda.'],
+  ['despesa_financeira', 'Juros e encargos',         false, 'Fica depois do EBITDA, no lucro líquido.'],
+  ['nao_operacional',    'Fora do resultado',        false, 'Compra de estoque, retirada de sócio. Só caixa.'],
+  ['investimento',       'Investimento',             false, 'Máquina, equipamento. Vira patrimônio, não despesa.'],
+  ['depreciacao',        'Depreciação',              false, 'Desgaste do que você já comprou.'],
+  ['imposto_lucro',      'Imposto sobre o lucro',    false, 'IRPJ e CSLL, depois do EBITDA.'],
+];
+const grupoInfo = g => GRUPOS.find(x => x[0] === g) || [g, g, true, ''];
+
+function montarSelectGrupo(el, valor){
+  el.innerHTML = GRUPOS.map(([v,rot]) =>
+    `<option value="${v}"${v===valor?' selected':''}>${rot}</option>`).join('');
+}
+
+document.getElementById('cl-grupo').onchange = e => {
+  document.getElementById('cl-explica').textContent = grupoInfo(e.target.value)[3];
+};
+
+document.getElementById('cl-add').onclick = async ()=>{
+  const nome = document.getElementById('cl-nome').value.trim();
+  if (!nome) return toast('Dê um nome à classificação.','er');
+  if (cache.categorias.some(c => c.nome.toLowerCase() === nome.toLowerCase()))
+    return toast('Já existe uma classificação com esse nome.','er');
+  const g = document.getElementById('cl-grupo').value;
+  const { error } = await sb.from('ec_categorias').insert({
+    nome, natureza: document.getElementById('cl-nat').value,
+    grupo_dre: g, entra_ebitda: grupoInfo(g)[2] });
+  if (error) return toast('Erro: '+error.message,'er');
+  document.getElementById('cl-nome').value = '';
+  toast(`Classificação "${nome}" criada.`,'ok');
+  recarregarCategorias();
+};
+
+async function recarregarCategorias(){
+  const { data } = await sb.from('ec_categorias')
+    .select('id,nome,natureza,grupo_dre,entra_ebitda,observacao').order('nome');
+  cache.categorias = data || [];
+  preencherSelects();
+  renderClassif();
+  recarregar();
+}
+
+async function renderClassif(){
+  const { data: uso } = await sb.rpc('ec_uso_categorias');
+  const conta = new Map((uso||[]).map(u => [u.categoria_id, Number(u.usos)]));
+
+  document.getElementById('t-classif').innerHTML = `
+    <thead><tr><th>Nome</th><th>Natureza</th><th>Onde entra no resultado</th>
+      <th>EBITDA</th><th class="num">Em uso</th><th></th></tr></thead>
+    <tbody>${cache.categorias.map(c => {
+      const n = conta.get(c.id) || 0;
+      const g = grupoInfo(c.grupo_dre);
+      return `<tr>
+        <td><b>${esc(c.nome)}</b></td>
+        <td><span class="tag ${c.natureza==='fixa'?'tag-fix':'tag-var'}">${natLabel(c.natureza)}</span></td>
+        <td>${esc(g[1])}<div class="hint">${esc(g[3])}</div></td>
+        <td>${c.entra_ebitda ? 'entra' : '<span class="hint">fica de fora</span>'}</td>
+        <td class="num">${n ? n + ' lanç.' : '<span class="hint">—</span>'}</td>
+        <td style="white-space:nowrap">
+          <button class="btn-mini" onclick="renomearCat(${c.id})">Renomear</button>
+          ${n ? '' : `<button class="btn-mini" onclick="apagarCat(${c.id})">Apagar</button>`}
+        </td></tr>`;
+    }).join('')}</tbody>`;
+}
+
+async function renomearCat(id){
+  const c = cache.categorias.find(x => x.id === id);
+  const nome = prompt('Nome novo para "' + c.nome + '":', c.nome);
+  if (nome === null) return;
+  const lim = nome.trim();
+  if (!lim) return toast('O nome não pode ficar vazio.','er');
+  if (lim === c.nome) return;
+  const { error } = await sb.from('ec_categorias').update({ nome: lim }).eq('id', id);
+  if (error) return toast('Erro: '+error.message,'er');
+  toast('Renomeada.','ok'); recarregarCategorias();
+}
+
+async function apagarCat(id){
+  const c = cache.categorias.find(x => x.id === id);
+  if (!confirm(`Apagar a classificação "${c.nome}"?`)) return;
+  const { error } = await sb.from('ec_categorias').delete().eq('id', id);
+  if (error) return toast(error.message.includes('foreign key')
+      ? 'Essa classificação está em uso e não pode ser apagada.' : 'Erro: '+error.message, 'er');
+  toast('Classificação apagada.','ok'); recarregarCategorias();
+}
+
 
 // ── CONTA CORRENTE ENTRE EMPRESAS ──────────────────────────────
 const CC_KEY = 'grupont_combinado';
