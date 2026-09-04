@@ -440,6 +440,23 @@ input[type=checkbox]{width:auto}
     </div>
 
     <div class="sec">
+      <h2>Preço de compra dos insumos
+        <span class="hint">o que você paga ao fornecedor — o custo por quadro é calculado a partir daqui</span></h2>
+      <div class="grid3" style="margin-bottom:10px">
+        <div><label>As mudanças valem a partir de</label><input type="date" id="cmp-vig"></div>
+        <div style="display:flex;align-items:end;gap:8px">
+          <button class="btn" id="cmp-salvar">Salvar preços de compra</button>
+          <button class="btn btn-sec" id="cmp-desfazer">Desfazer</button>
+        </div>
+      </div>
+      <div class="twrap"><table id="t-compras"></table></div>
+      <div class="aviso aviso-i" style="margin-top:12px">Quando o fornecedor reajustar, mude só o
+        <b>preço de compra</b>: o custo unitário é recalculado por <b>preço ÷ rendimento</b> e o preço
+        antigo fica no histórico. O <b>rendimento</b> é quantos quadros (ou kits) saem de uma unidade de
+        compra, já com a perda embutida — ele só muda se você mudar o plano de corte ou o consumo.</div>
+    </div>
+
+    <div class="sec">
       <h2>Cadastrar insumo novo <span class="hint">ex.: Fita gomada 0,30 · Grampos 0,20</span></h2>
       <div class="grid3">
         <div><label>Nome</label><input id="i-nome" placeholder="Fita gomada"></div>
@@ -1323,6 +1340,7 @@ const primeiroDoMes = () => { const d=new Date(); return new Date(Date.UTC(d.get
                                                     .toISOString().slice(0,10); };
 document.getElementById('ins-vig').value = primeiroDoMes();
 document.getElementById('i-vig').value   = primeiroDoMes();
+document.getElementById('cmp-vig').value = primeiroDoMes();
 
 // preço vigente de um insumo para um tamanho (null = não cadastrado)
 function precoDe(ins, tam){
@@ -1413,8 +1431,84 @@ function renderCustos(){
     }).join('')}</tbody>`;
   el.querySelectorAll('.pin').forEach(inp => inp.oninput = () =>
     inp.classList.toggle('mudou', String(inp.value) !== String(inp.dataset.orig)));
+  renderCompras();
   simular();
 }
+
+// ── preço de compra: o que se paga ao fornecedor ──
+const esc4 = v => v==null ? '—' : Number(v).toFixed(4).replace('.',',');
+const attr = v => v==null ? '' : String(v).replace(/"/g,'&quot;');
+
+function precoRowDe(ins, tam){
+  const alvo = ins.varia_por_tamanho ? tam : null;
+  return (ins.precos||[]).find(x => (x.tamanho||null) === alvo) || {};
+}
+
+function renderCompras(){
+  const el = document.getElementById('t-compras');
+  if (!el) return;
+  const verInativos = document.getElementById('ins-inativos').checked;
+  const lista = (cache.insumos||[]).filter(i => verInativos || i.ativo);
+  const linhas = [];
+  lista.forEach(i => {
+    (i.varia_por_tamanho ? TAMANHOS : [null]).forEach(t => {
+      const p = precoRowDe(i, t);
+      const k = `${i.id}|${t||''}`;
+      const campo = (nome, val, tipo, step) =>
+        `<input class="cin"${tipo?` type="${tipo}" step="${step}"`:''} data-k="${k}" data-campo="${nome}"
+           data-orig="${attr(val)}" value="${attr(val)}">`;
+      const custo = (p.preco_compra!=null && p.rendimento)
+        ? Number(p.preco_compra)/Number(p.rendimento)
+        : (p.valor!=null ? Number(p.valor) : null);
+      linhas.push(`<tr${i.ativo?'':' style="opacity:.5"'}>
+        <td><b>${i.nome}</b><div class="hint">${i.grupo||'—'}</div></td>
+        <td>${t||'todos'}</td>
+        <td>${campo('fornecedor', p.fornecedor)}</td>
+        <td>${campo('compra_unidade', p.compra_unidade)}</td>
+        <td class="num">${campo('preco_compra', p.preco_compra, 'number', '0.01')}</td>
+        <td class="num">${campo('rendimento', p.rendimento, 'number', '0.0001')}</td>
+        <td class="num"><b>${esc4(custo)}</b></td></tr>`);
+    });
+  });
+  el.innerHTML = linhas.length ? `
+    <thead><tr><th>Insumo</th><th>Tamanho</th><th>Fornecedor</th><th>Unidade de compra</th>
+      <th class="num">Preço de compra R$</th><th class="num">Rende</th>
+      <th class="num">Custo unitário R$</th></tr></thead>
+    <tbody>${linhas.join('')}</tbody>`
+    : '<tbody><tr><td class="vazio">Nenhum insumo cadastrado.</td></tr></tbody>';
+  el.querySelectorAll('.cin').forEach(inp => inp.oninput = () =>
+    inp.classList.toggle('mudou', String(inp.value) !== String(inp.dataset.orig)));
+}
+
+document.getElementById('cmp-desfazer').onclick = () => renderCompras();
+
+document.getElementById('cmp-salvar').onclick = async ()=>{
+  const vig = document.getElementById('cmp-vig').value;
+  if (!vig) return toast('Informe a partir de quando os preços novos valem.','er');
+  const mudados = [...document.querySelectorAll('#t-compras .cin')]
+    .filter(i => String(i.value) !== String(i.dataset.orig));
+  if (!mudados.length) return toast('Nenhum preço de compra foi alterado.','er');
+
+  const chaves = [...new Set(mudados.map(i => i.dataset.k))];
+  for (const k of chaves){
+    const c = {};
+    document.querySelectorAll(`#t-compras .cin[data-k="${k}"]`)
+      .forEach(i => c[i.dataset.campo] = i.value.trim());
+    const pc  = c.preco_compra === '' ? null : parseFloat(c.preco_compra);
+    const ren = c.rendimento   === '' ? null : parseFloat(c.rendimento);
+    if (pc == null || !ren || ren <= 0)
+      return toast('Preço de compra e rendimento precisam estar preenchidos na mesma linha.','er');
+    const [insId, tam] = k.split('|');
+    const { error } = await sb.rpc('ec_insumo_set_preco', {
+      p_insumo_id: Number(insId), p_tamanho: tam || null, p_valor: null, p_vigencia: vig,
+      p_preco_compra: pc, p_compra_unidade: c.compra_unidade || null,
+      p_rendimento: ren, p_fornecedor: c.fornecedor || null });
+    if (error) return toast('Erro ao gravar: '+error.message,'er');
+  }
+  toast(`${chaves.length} preço(s) de compra atualizado(s) a partir de `+
+        vig.split('-').reverse().join('/')+'.','ok');
+  recarregar();
+};
 
 // ── salvar as alterações de preço ──
 document.getElementById('ins-salvar').onclick = async ()=>{
@@ -1460,9 +1554,15 @@ async function verHistorico(id){
   document.getElementById('hist-nome').textContent = ins ? ins.nome : '';
   const dt = s => s ? s.split('-').reverse().join('/') : '—';
   document.getElementById('t-hist').innerHTML = (data||[]).length ? `
-    <thead><tr><th>Tamanho</th><th class="num">Valor</th><th>Vale de</th><th>Até</th><th>Situação</th></tr></thead>
+    <thead><tr><th>Tamanho</th><th>Fornecedor</th><th>Unidade de compra</th>
+      <th class="num">Preço de compra</th><th class="num">Rende</th>
+      <th class="num">Custo unitário</th><th>Vale de</th><th>Até</th><th>Situação</th></tr></thead>
     <tbody>${data.map(r=>`<tr>
-      <td>${r.tamanho||'todos'}</td><td class="num">${R(r.valor)}</td>
+      <td>${r.tamanho||'todos'}</td><td>${r.fornecedor||'—'}</td>
+      <td>${r.compra_unidade||'—'}</td>
+      <td class="num">${r.preco_compra==null?'—':R(r.preco_compra)}</td>
+      <td class="num">${r.rendimento==null?'—':Number(r.rendimento).toLocaleString('pt-BR')}</td>
+      <td class="num">${esc4(r.valor)}</td>
       <td>${dt(r.vigencia_inicio)}</td><td>${dt(r.vigencia_fim)}</td>
       <td>${r.vigencia_fim?'<span style="color:var(--gray3)">encerrado</span>'
                           :'<span class="pos">vigente</span>'}</td></tr>`).join('')}</tbody>`
