@@ -441,7 +441,7 @@ input[type=checkbox]{width:auto}
 
     <div class="sec">
       <h2>Preço de compra dos insumos
-        <span class="hint">o que você paga ao fornecedor — o custo por quadro é calculado a partir daqui</span></h2>
+        <span class="hint">o que você paga ao fornecedor — insumos desligados aparecem esmaecidos e não entram no custo do quadro</span></h2>
       <div class="grid3" style="margin-bottom:10px">
         <div><label>As mudanças valem a partir de</label><input type="date" id="cmp-vig"></div>
         <div style="display:flex;align-items:end;gap:8px">
@@ -1447,8 +1447,10 @@ function precoRowDe(ins, tam){
 function renderCompras(){
   const el = document.getElementById('t-compras');
   if (!el) return;
-  const verInativos = document.getElementById('ins-inativos').checked;
-  const lista = (cache.insumos||[]).filter(i => verInativos || i.ativo);
+  // Aqui entram todos os insumos, inclusive os desligados: esta tabela é o
+  // registro do que se paga ao fornecedor, não o cálculo do custo. Os
+  // desligados aparecem esmaecidos e não somam no custo do quadro.
+  const lista = (cache.insumos||[]);
   const linhas = [];
   lista.forEach(i => {
     (i.varia_por_tamanho ? TAMANHOS : [null]).forEach(t => {
