@@ -342,6 +342,11 @@ input[type=checkbox]{width:auto}
     <div class="sec"><h2>Por tamanho</h2><div class="twrap"><table id="t-mix-tam"></table></div></div>
     <div class="sec"><h2>Por acabamento</h2><div class="twrap"><table id="t-mix-mold"></table></div></div>
     <div class="sec"><h2>Por tipo de produto</h2><div class="twrap"><table id="t-mix-tipo"></table></div></div>
+    <div class="sec"><h2>Consumo de moldura no período <span class="hint">metro linear de vareta · só pedidos pagos e não cancelados · vara de 2,70 m</span></h2>
+      <div class="twrap"><table id="t-mold-cons"></table></div>
+      <p class="hint" id="mold-cons-info"></p></div>
+    <div class="sec"><h2>Consumo de moldura mês a mês <span class="hint">metros com perda da vara</span></h2>
+      <div class="twrap"><table id="t-mold-mes"></table></div></div>
   </div>
 
   <!-- ── ESTADOS ── -->
@@ -858,20 +863,21 @@ async function recarregar(){
   // Relatórios de produto, mix e estado — todos agregados pelo servidor.
   const arg = {p_de: filtro.de, p_ate: filtro.ate,
                p_loja: filtro.loja ? Number(filtro.loja) : null};
-  const [tp,ab,mt,mm,mtp,uf] = await Promise.all([
+  const [tp,ab,mt,mm,mtp,uf,cm] = await Promise.all([
     sb.rpc('ec_top_produtos', arg),
     sb.rpc('ec_curva_abc', arg),
     sb.rpc('ec_mix_vendas', {...arg, p_dim:'tamanho'}),
     sb.rpc('ec_mix_vendas', {...arg, p_dim:'acabamento'}),
     sb.rpc('ec_mix_vendas', {...arg, p_dim:'tipo'}),
     sb.rpc('ec_vendas_uf', arg),
+    sb.rpc('ec_consumo_moldura', arg),
   ]);
   for (const [nome,r] of [['top produtos',tp],['curva ABC',ab],['mix tamanho',mt],
-                          ['mix acabamento',mm],['mix tipo',mtp],['estados',uf]])
+                          ['mix acabamento',mm],['mix tipo',mtp],['estados',uf],['consumo de moldura',cm]])
     if (r.error) toast(`Erro em ${nome}: ${r.error.message}`,'er');
   cache.top=tp.data||[]; cache.abc=ab.data||[];
   cache.mixTam=mt.data||[]; cache.mixMold=mm.data||[]; cache.mixTipo=mtp.data||[];
-  cache.uf=uf.data||[];
+  cache.uf=uf.data||[]; cache.moldura=cm.data||[];
   document.getElementById('f-info').textContent =
     `${cache.vendas.length} linhas · ${compLabel(filtro.de)} a ${compLabel(filtro.ate)}`;
   renderTudo();
@@ -1198,6 +1204,48 @@ function renderMix(){
   tabelaMix('t-mix-tam',  cache.mixTam,  'Tamanho');
   tabelaMix('t-mix-mold', cache.mixMold, 'Acabamento');
   tabelaMix('t-mix-tipo', cache.mixTipo, 'Tipo');
+  renderConsumoMoldura();
+}
+// ── CONSUMO DE MOLDURA (metro linear) ──────────────────────────
+function renderConsumoMoldura(){
+  const d = cache.moldura || [];
+  const M = v => (v==null||isNaN(v)) ? '—' : Number(v).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+' m';
+  const t1 = document.getElementById('t-mold-cons'), t2 = document.getElementById('t-mold-mes');
+  if (!d.length){
+    t1.innerHTML = t2.innerHTML = '<tbody><tr><td class="vazio">Sem dados no período</td></tr></tbody>';
+    document.getElementById('mold-cons-info').textContent=''; return;
+  }
+  const cores = ['Moldura Madeira','Moldura Branca','Moldura Preta'];
+  const tams = ['20x30','30x40','40x60'];
+  const q = (f) => d.filter(f).reduce((s,x)=>s+Number(x.quadros||0),0);
+  const sm = (f,campo) => d.filter(f).reduce((s,x)=>s+Number(x[campo]||0),0);
+  const linha = (rot, f) => `<td><b>${rot}</b></td>${tams.map(t=>`<td class="num">${N(q(x=>f(x)&&x.tamanho===t))}</td>`).join('')}
+    <td class="num">${N(q(x=>f(x)&&!x.tamanho))}</td>
+    <td class="num">${M(sm(f,'metros_perimetro'))}</td><td class="num"><b>${M(sm(f,'metros_consumo'))}</b></td>
+    <td class="num">${N(Math.ceil(sm(f,'varas')))}</td><td class="num"><b>${R(sm(f,'custo'))}</b></td>`;
+  t1.innerHTML = `<thead><tr><th>Moldura</th><th class="num">20x30</th><th class="num">30x40</th><th class="num">40x60</th>
+      <th class="num">Sem tamanho</th><th class="num">Metros (perímetro)</th><th class="num">Metros c/ perda</th>
+      <th class="num">Varas 2,70 m</th><th class="num">Custo</th></tr>
+      <tr><th></th><th class="num" colspan="4" style="font-weight:400">quadros</th><th colspan="4"></th></tr></thead>
+    <tbody>${cores.filter(c=>d.some(x=>x.acabamento===c)).map(c=>`<tr>${linha(c.replace('Moldura ',''), x=>x.acabamento===c)}</tr>`).join('')}</tbody>
+    <tfoot><tr>${linha('TOTAL', ()=>true)}</tr></tfoot>`;
+  const semTam = q(x=>!x.tamanho);
+  document.getElementById('mold-cons-info').textContent =
+    'Perímetro: 20x30 = 1,0 m · 30x40 = 1,4 m · 40x60 = 2,0 m por quadro. "Com perda" usa o aproveitamento da vara de 2,70 m '
+    + '(1,125 m · 1,575 m · 2,25 m por quadro) e é o que vira custo. '
+    + (semTam ? `${N(semTam)} quadros vieram sem tamanho na planilha da Shopee (kits de 5 e 6) e não entram nos metros nem no custo.` : '');
+  const comps = [...new Set(d.map(x=>x.competencia))].sort();
+  const cel = (c,f) => `<td class="num">${M(sm(x=>x.competencia===c&&f(x),'metros_consumo'))}</td>`;
+  t2.innerHTML = `<thead><tr><th>Mês</th><th class="num">Madeira</th><th class="num">Branca</th><th class="num">Preta</th>
+      <th class="num">Total</th><th class="num">Varas</th><th class="num">Custo</th></tr></thead>
+    <tbody>${comps.map(c=>`<tr><td><b>${compLabel(c)}</b></td>
+      ${cores.map(k=>cel(c,x=>x.acabamento===k)).join('')}
+      <td class="num"><b>${M(sm(x=>x.competencia===c,'metros_consumo'))}</b></td>
+      <td class="num">${N(Math.ceil(sm(x=>x.competencia===c,'varas')))}</td>
+      <td class="num">${R(sm(x=>x.competencia===c,'custo'))}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td>TOTAL</td>${cores.map(k=>`<td class="num">${M(sm(x=>x.acabamento===k,'metros_consumo'))}</td>`).join('')}
+      <td class="num">${M(sm(()=>true,'metros_consumo'))}</td><td class="num">${N(Math.ceil(sm(()=>true,'varas')))}</td>
+      <td class="num">${R(sm(()=>true,'custo'))}</td></tr></tfoot>`;
 }
 
 // ── ESTADOS ────────────────────────────────────────────────────
