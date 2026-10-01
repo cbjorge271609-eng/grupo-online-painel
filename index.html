@@ -1312,7 +1312,7 @@ function renderConsumoMoldura(){
 async function renderGiro(){
   const [g, d] = await Promise.all([
     sb.from('ec_capital_giro').select('*').order('data_ref',{ascending:false}),
-    sb.from('ec_vw_dre_mes').select('competencia,midia,despesas_operacionais').order('competencia'),
+    sb.from('ec_vw_dre_mes').select('competencia,loja_id,midia,despesas_operacionais,imposto_venda,imposto_fonte').order('competencia'),
   ]);
   if (g.error) return toast('Erro ao ler capital de giro: '+g.error.message,'er');
   const rows = g.data||[], nomeLoja = id => (cache.lojas.find(l=>l.id===id)||{}).nome || ('Loja '+id);
@@ -1330,21 +1330,40 @@ async function renderGiro(){
   const banco = atual.reduce((s,r)=>s+n(r.saldo_banco),0), cart = atual.reduce((s,r)=>s+n(r.saldo_carteira),0);
   const pend = atual.reduce((s,r)=>s+n(r.saldo_pendente),0), ads = atual.reduce((s,r)=>s+n(r.credito_ads),0);
   const livre = banco + cart;
+  // próxima guia do Simples (vence dia 20): até o dia 20 é a do mês anterior; depois, a do mês corrente (parcial)
+  const hj = new Date(Date.now()-3*3600e3), dia = hj.getUTCDate();
+  const ref = new Date(Date.UTC(hj.getUTCFullYear(), hj.getUTCMonth() - (dia<=20?1:0), 1));
+  const compImp = ref.toISOString().slice(0,10);
+  const venc = new Date(Date.UTC(ref.getUTCFullYear(), ref.getUTCMonth()+1, 20));
+  const vencTxt = String(venc.getUTCDate()).padStart(2,'0')+'/'+String(venc.getUTCMonth()+1).padStart(2,'0');
+  const mesesPt = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  const linImp = (d.data||[]).filter(r=>r.competencia===compImp);
+  const pago = linImp.length && linImp.every(r=>r.imposto_fonte==='guia');
+  const impLoja = id => pago ? 0 : linImp.filter(r=>r.loja_id===id).reduce((s,r)=>s+n(r.imposto_venda),0);
+  const impTot = pago ? 0 : linImp.reduce((s,r)=>s+n(r.imposto_venda),0);
+  const parcial = dia>20;
   document.getElementById('k-giro').innerHTML = [
     ['No banco', R(banco), 'saldo das contas das empresas',''],
     ['Disponível para saque', R(cart), 'carteira Shopee, já liberado',''],
     ['Pendente (preso)', R(pend), 'libera quando o quadro chega ao cliente',''],
     ['Capital de giro total', R(livre+pend), P((livre+pend)? pend/(livre+pend)*100:0)+' ainda preso na Shopee','g'],
     ['Caixa livre', R(livre), custo? 'cobre '+(livre/custo).toFixed(1).replace('.',',')+' mês(es) de estrutura + mídia' : 'banco + disponível para saque', livre>=custo?'g':'r'],
+    ['Imposto a pagar '+vencTxt, pago?'guia paga':R(impTot),
+      pago?'vendas de '+mesesPt[ref.getUTCMonth()]+' já quitadas'
+        :'Simples sobre vendas de '+mesesPt[ref.getUTCMonth()]+(parcial?' (parcial, mês em andamento)':' · estimado 6%'), impTot?'r':''],
+    ['Livre após imposto', R(livre-impTot), 'caixa livre menos a guia do dia 20', livre-impTot>=0?'g':'r'],
     ...(ads ? [['Crédito Shopee Ads', R(ads), 'já pago, ainda não consumido','']] : []),
   ].map(([a,b,c,k])=>`<div class="kpi ${k}"><div class="lb">${a}</div><div class="vl">${b}</div><div class="sb">${c}</div></div>`).join('');
   const lin = (rot, r) => `<td><b>${rot}</b></td><td class="num">${R(n(r.saldo_banco))}</td><td class="num">${R(n(r.saldo_carteira))}</td>
     <td class="num"><b>${R(n(r.saldo_banco)+n(r.saldo_carteira))}</b></td><td class="num">${R(n(r.saldo_pendente))}</td>
-    <td class="num"><b>${R(tot(r))}</b></td><td class="num">${tot(r)? P(n(r.saldo_pendente)/tot(r)*100):'—'}</td><td class="num">${r.credito_ads==null?'—':R(n(r.credito_ads))}</td>`;
-  const somaR = {saldo_banco:banco, saldo_carteira:cart, saldo_pendente:pend, credito_ads: ads||null};
+    <td class="num"><b>${R(tot(r))}</b></td><td class="num">${tot(r)? P(n(r.saldo_pendente)/tot(r)*100):'—'}</td><td class="num">${r.credito_ads==null?'—':R(n(r.credito_ads))}</td>
+    <td class="num">${R(r.imp)}</td><td class="num"><b class="${n(r.saldo_banco)+n(r.saldo_carteira)-r.imp>=0?'pos':'neg'}">${R(n(r.saldo_banco)+n(r.saldo_carteira)-r.imp)}</b></td>`;
+  const somaR = {saldo_banco:banco, saldo_carteira:cart, saldo_pendente:pend, credito_ads: ads||null, imp:impTot};
+  atual.forEach(r=>r.imp=impLoja(r.loja_id));
   document.getElementById('t-giro').innerHTML = atual.length ? `
     <thead><tr><th>Loja</th><th class="num">Banco</th><th class="num">Disponível p/ saque</th><th class="num">Caixa livre</th>
-      <th class="num">Pendente (preso)</th><th class="num">Total</th><th class="num">% preso</th><th class="num">Crédito Ads</th></tr></thead>
+      <th class="num">Pendente (preso)</th><th class="num">Total</th><th class="num">% preso</th><th class="num">Crédito Ads</th>
+      <th class="num">Imposto ${vencTxt}</th><th class="num">Livre após imposto</th></tr></thead>
     <tbody>${atual.sort((a,b)=>a.loja_id-b.loja_id).map(r=>`<tr>${lin(nomeLoja(r.loja_id), r)}</tr>`).join('')}</tbody>
     <tfoot><tr>${lin('TOTAL', somaR)}</tr></tfoot>` : '<tbody><tr><td class="vazio">Registre os primeiros saldos abaixo</td></tr></tbody>';
   // formulário, pré-preenchido com a última foto
