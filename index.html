@@ -129,6 +129,35 @@ th{background:var(--surface-2);color:var(--ink-3);font-family:"Barlow Condensed"
 td{padding:9px 12px;border-bottom:1px solid var(--line);color:var(--ink-2)}
 tbody tr:last-child td{border-bottom:none}
 tbody tr:hover td{background:var(--surface-2)}
+tr.linha-sub td{background:var(--surface-2);color:var(--ink);font-weight:700;
+  border-top:1px solid var(--line-2)}
+tr.linha-tot td{background:var(--accent-soft);color:var(--accent);font-weight:700;
+  border-top:2px solid var(--accent);font-size:13.5px}
+#dre-print-cab{display:none}
+@media print{
+  @page{size:A4 landscape;margin:12mm}
+  :root{--ground:#fff;--surface:#fff;--surface-2:#F1F4F6;--line:#C9D3D9;--line-2:#9FB0BC;
+    --ink:#000;--ink-2:#1A1A1A;--ink-3:#444;--accent:#0E4457;--accent-soft:#E2EEF2;
+    --pos:#15703F;--neg:#B02418;color-scheme:light}
+  body{background:#fff!important;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  aside,header,.filtros,.no-print,#login{display:none!important}
+  body.imprimindo-dre .page{display:none!important}
+  body.imprimindo-dre #p-dre{display:block!important}
+  #app,.shell{display:block!important;min-height:0}
+  main{padding:0!important;max-width:none;width:100%}
+  .sec h2 .hint{display:block;margin-top:2px;color:#444}
+  .conteudo{display:block}
+  .sec{border:none;box-shadow:none;margin-bottom:14px;break-inside:avoid}
+  .sec h2{background:none;color:#000;padding:0 0 6px;border-bottom:2px solid #000;font-size:14px}
+  .sec>*:not(h2){margin-left:0;margin-right:0}
+  .twrap{overflow:visible;border:none}
+  table{font-size:10px}
+  th,td{padding:4px 6px}
+  tr{break-inside:avoid}
+  #dre-print-cab{display:block;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid #999}
+  #dre-print-cab h1{font-size:20px;color:#000}
+  #dre-print-cab p{font-size:11px;color:#333;margin-top:2px}
+}
 tfoot td{background:var(--surface-2);font-weight:700;color:var(--ink);
   border-top:2px solid var(--line-2);border-bottom:none}
 .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -372,6 +401,9 @@ input[type=checkbox]{width:auto}
 
   <!-- ── DRE ── -->
   <div class="page" id="p-dre">
+    <div id="dre-print-cab"><h1>Demonstrativo de Resultado (DRE)</h1><p id="dre-print-info"></p></div>
+    <div class="no-print" style="display:flex;justify-content:flex-end;margin-bottom:12px">
+      <button class="btn btn-sm" id="dre-imprimir">Imprimir DRE / salvar PDF</button></div>
     <div class="sec">
       <h2>DRE por mês <span class="hint">EBITDA já exclui financeiras, depreciação e imposto sobre lucro</span></h2>
       <div class="twrap"><table id="t-dre"></table></div>
@@ -1043,6 +1075,17 @@ async function salvarConf(){
 }
 
 // ── DRE ────────────────────────────────────────────────────────
+document.addEventListener('click',e=>{
+  if(e.target.id!=='dre-imprimir') return;
+  const sel=id=>{const x=document.getElementById(id);return x.options[x.selectedIndex]?.text||''};
+  const hoje=new Date().toLocaleDateString('pt-BR');
+  document.getElementById('dre-print-info').textContent =
+    `Grupo Online — ${sel('f-loja')} · Período: ${sel('f-de')} a ${sel('f-ate')} · Emitido em ${hoje}`;
+  document.body.classList.add('imprimindo-dre');
+  const fim=()=>{document.body.classList.remove('imprimindo-dre');window.removeEventListener('afterprint',fim)};
+  window.addEventListener('afterprint',fim);
+  window.print();
+});
 function renderDRE(){
   const d = cache.dre;
   document.getElementById('t-dre').innerHTML = d.length ? `
@@ -1087,8 +1130,7 @@ function renderDRE(){
   ];
   document.getElementById('t-cascata').innerHTML = `
     <thead><tr><th>Linha</th><th class="num">Valor</th><th class="num">% da receita</th></tr></thead>
-    <tbody>${passos.map(([l,vv,cl])=>`<tr style="${cl==='tot'?'background:var(--kpi);font-weight:700'
-      :cl==='sub'?'background:#F1F5F9;font-weight:700':''}">
+    <tbody>${passos.map(([l,vv,cl])=>`<tr class="${cl==='tot'?'linha-tot':cl==='sub'?'linha-sub':''}">
       <td>${l}</td><td class="num">${R(vv)}</td>
       <td class="num">${rec?P(vv/rec*100):'—'}</td></tr>`).join('')}</tbody>`;
 }
@@ -1739,9 +1781,9 @@ function simular(){
     <div class="twrap"><table>
       <tbody>
         ${linhas.map(l=>`<tr><td>${l.nome} · ${l.det}</td><td class="num">${R(l.tot)}</td></tr>`).join('')}
-        <tr style="background:#F1F5F9;font-weight:700"><td>Custo do kit</td><td class="num">${R(custo)}</td></tr>
+        <tr class="linha-sub"><td>Custo do kit</td><td class="num">${R(custo)}</td></tr>
         <tr><td>Comissão Shopee estimada (14% + R$ ${fixa} fixos)</td><td class="num">${R(com)}</td></tr>
-        <tr style="background:var(--kpi);font-weight:700"><td>Margem de contribuição</td>
+        <tr class="linha-tot"><td>Margem de contribuição</td>
             <td class="num ${mc>=0?'pos':'neg'}">${R(mc)}</td></tr>
         <tr><td>Markup sobre o custo</td><td class="num">${X(pr/custo)}</td></tr>
         <tr><td>Margem sobre o preço</td><td class="num">${P(mc/pr*100)}</td></tr>
