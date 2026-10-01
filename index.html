@@ -1116,7 +1116,9 @@ function renderDRE(){
     ['Receita bruta', rec, ''],
     ['− Comissão do marketplace', -soma(d,'comissao'),''],
     ['− Taxa de serviço', -soma(d,'taxa_servico'),''],
-    ['− Impostos sobre venda', -soma(d,'imposto_venda'),''],
+    ['− Impostos sobre venda'+(()=>{const g=d.filter(r=>r.imposto_fonte==='guia').length;
+       return !d.length?'':g===d.length?' (guia paga)':g?' (guia paga + estimativa)':' (estimado pela alíquota)'})(),
+       -soma(d,'imposto_venda'),''],
     ['= Receita líquida', soma(d,'receita_liquida'),'sub'],
     ['− CPV (produção, moldura, embalagem)', -soma(d,'cpv'),''],
     ['= Lucro bruto', soma(d,'lucro_bruto'),'sub'],
