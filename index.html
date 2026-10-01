@@ -256,6 +256,7 @@ input[type=checkbox]{width:auto}
     <button data-p="mix">Mix de vendas</button>
     <button data-p="uf">Estados</button>
     <div class="g-tit">Financeiro</div>
+    <button data-p="giro">Capital de giro</button>
     <button data-p="dre">DRE e EBITDA</button>
     <button data-p="margem">Margem e markup</button>
     <button data-p="despesas">Despesas</button>
@@ -353,6 +354,20 @@ input[type=checkbox]{width:auto}
   <div class="page" id="p-uf">
     <div class="sec"><h2>Vendas por estado <span class="hint" id="uf-info"></span></h2>
       <div class="twrap"><table id="t-uf"></table></div></div>
+  </div>
+
+  <!-- ── CAPITAL DE GIRO ── -->
+  <div class="page" id="p-giro">
+    <div class="sec"><h2>Dinheiro do grupo <span class="hint" id="giro-data"></span></h2><div class="kpis" id="k-giro"></div></div>
+    <div class="sec"><h2>Por loja <span class="hint">banco + carteira Shopee (disponível para saque) + pendente (preso até a entrega ao cliente)</span></h2>
+      <div class="twrap"><table id="t-giro"></table></div></div>
+    <div class="sec"><h2>Atualizar saldos <span class="hint">Shopee: Finanças → Saldo da Carteira (disponível) e Minha Renda (pendente) · Ads: saldo de crédito do Shopee Ads</span></h2>
+      <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:12px">
+        <div class="f"><label>Data da foto</label><input type="date" id="giro-dt"></div>
+        <button class="btn" id="giro-salvar">Salvar saldos</button></div>
+      <div class="twrap"><table id="t-giro-form"></table></div></div>
+    <div class="sec"><h2>Histórico <span class="hint">uma linha por foto registrada</span></h2>
+      <div class="twrap"><table id="t-giro-hist"></table></div></div>
   </div>
 
   <!-- ── DRE ── -->
@@ -894,6 +909,7 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   document.getElementById('titulo-pag').textContent = b.textContent.trim();
   document.getElementById('lateral').classList.remove('aberta');
   if (b.dataset.p === 'classif') renderClassif();
+  if (b.dataset.p === 'giro') renderGiro();
   window.scrollTo({top:0});
 });
 document.getElementById('abrir-menu').onclick = ()=>
@@ -1247,6 +1263,74 @@ function renderConsumoMoldura(){
       <td class="num">${M(sm(()=>true,'metros_consumo'))}</td><td class="num">${N(Math.ceil(sm(()=>true,'varas')))}</td>
       <td class="num">${R(sm(()=>true,'custo'))}</td></tr></tfoot>`;
 }
+
+// ── CAPITAL DE GIRO ────────────────────────────────────────────
+async function renderGiro(){
+  const [g, d] = await Promise.all([
+    sb.from('ec_capital_giro').select('*').order('data_ref',{ascending:false}),
+    sb.from('ec_vw_dre_mes').select('competencia,midia,despesas_operacionais').order('competencia'),
+  ]);
+  if (g.error) return toast('Erro ao ler capital de giro: '+g.error.message,'er');
+  const rows = g.data||[], nomeLoja = id => (cache.lojas.find(l=>l.id===id)||{}).nome || ('Loja '+id);
+  const datas = [...new Set(rows.map(r=>r.data_ref))];
+  const ult = datas[0], atual = rows.filter(r=>r.data_ref===ult);
+  const n = v => Number(v)||0, tot = r => n(r.saldo_banco)+n(r.saldo_carteira)+n(r.saldo_pendente);
+  const dt = x => x ? x.split('-').reverse().join('/') : '—';
+  document.getElementById('giro-data').textContent = ult ? 'foto de '+dt(ult) : 'nenhum saldo registrado';
+  // custo mensal da estrutura: média dos 3 últimos meses fechados (desp. operacionais + mídia)
+  const mesAtual = new Date().toISOString().slice(0,7)+'-01';
+  const porMes = {};
+  for (const r of (d.data||[])) if (r.competencia < mesAtual)
+    porMes[r.competencia] = (porMes[r.competencia]||0) + n(r.despesas_operacionais) + n(r.midia);
+  const ult3 = Object.keys(porMes).sort().slice(-3), custo = ult3.length ? ult3.reduce((s,m)=>s+porMes[m],0)/ult3.length : 0;
+  const banco = atual.reduce((s,r)=>s+n(r.saldo_banco),0), cart = atual.reduce((s,r)=>s+n(r.saldo_carteira),0);
+  const pend = atual.reduce((s,r)=>s+n(r.saldo_pendente),0), ads = atual.reduce((s,r)=>s+n(r.credito_ads),0);
+  const livre = banco + cart;
+  document.getElementById('k-giro').innerHTML = [
+    ['No banco', R(banco), 'saldo das contas das empresas',''],
+    ['Disponível para saque', R(cart), 'carteira Shopee, já liberado',''],
+    ['Pendente (preso)', R(pend), 'libera quando o quadro chega ao cliente',''],
+    ['Capital de giro total', R(livre+pend), P((livre+pend)? pend/(livre+pend)*100:0)+' ainda preso na Shopee','g'],
+    ['Caixa livre', R(livre), custo? 'cobre '+(livre/custo).toFixed(1).replace('.',',')+' mês(es) de estrutura + mídia' : 'banco + disponível para saque', livre>=custo?'g':'r'],
+    ...(ads ? [['Crédito Shopee Ads', R(ads), 'já pago, ainda não consumido','']] : []),
+  ].map(([a,b,c,k])=>`<div class="kpi ${k}"><div class="lb">${a}</div><div class="vl">${b}</div><div class="sb">${c}</div></div>`).join('');
+  const lin = (rot, r) => `<td><b>${rot}</b></td><td class="num">${R(n(r.saldo_banco))}</td><td class="num">${R(n(r.saldo_carteira))}</td>
+    <td class="num"><b>${R(n(r.saldo_banco)+n(r.saldo_carteira))}</b></td><td class="num">${R(n(r.saldo_pendente))}</td>
+    <td class="num"><b>${R(tot(r))}</b></td><td class="num">${tot(r)? P(n(r.saldo_pendente)/tot(r)*100):'—'}</td><td class="num">${r.credito_ads==null?'—':R(n(r.credito_ads))}</td>`;
+  const somaR = {saldo_banco:banco, saldo_carteira:cart, saldo_pendente:pend, credito_ads: ads||null};
+  document.getElementById('t-giro').innerHTML = atual.length ? `
+    <thead><tr><th>Loja</th><th class="num">Banco</th><th class="num">Disponível p/ saque</th><th class="num">Caixa livre</th>
+      <th class="num">Pendente (preso)</th><th class="num">Total</th><th class="num">% preso</th><th class="num">Crédito Ads</th></tr></thead>
+    <tbody>${atual.sort((a,b)=>a.loja_id-b.loja_id).map(r=>`<tr>${lin(nomeLoja(r.loja_id), r)}</tr>`).join('')}</tbody>
+    <tfoot><tr>${lin('TOTAL', somaR)}</tr></tfoot>` : '<tbody><tr><td class="vazio">Registre os primeiros saldos abaixo</td></tr></tbody>';
+  // formulário, pré-preenchido com a última foto
+  document.getElementById('giro-dt').value = new Date(Date.now()-3*3600e3).toISOString().slice(0,10);
+  const campo = (lid, c) => { const r = atual.find(x=>x.loja_id===lid)||{};
+    return `<td><input type="number" step="0.01" id="gi-${lid}-${c}" value="${r[c]??''}" style="width:130px;text-align:right"></td>`; };
+  document.getElementById('t-giro-form').innerHTML = `
+    <thead><tr><th>Loja</th><th>Banco</th><th>Disponível p/ saque</th><th>Pendente</th><th>Crédito Ads</th></tr></thead>
+    <tbody>${[...cache.lojas].sort((a,b)=>a.id-b.id).map(l=>`<tr><td><b>${l.nome}</b></td>
+      ${['saldo_banco','saldo_carteira','saldo_pendente','credito_ads'].map(c=>campo(l.id,c)).join('')}</tr>`).join('')}</tbody>`;
+  // histórico
+  document.getElementById('t-giro-hist').innerHTML = datas.length ? `
+    <thead><tr><th>Data</th><th class="num">Banco</th><th class="num">Disponível</th><th class="num">Pendente</th><th class="num">Total</th><th class="num">Variação</th></tr></thead>
+    <tbody>${datas.map((dd,i)=>{ const rs = rows.filter(r=>r.data_ref===dd), t = rs.reduce((s,r)=>s+tot(r),0);
+      const ant = datas[i+1] ? rows.filter(r=>r.data_ref===datas[i+1]).reduce((s,r)=>s+tot(r),0) : null;
+      return `<tr><td><b>${dt(dd)}</b></td><td class="num">${R(rs.reduce((s,r)=>s+n(r.saldo_banco),0))}</td>
+        <td class="num">${R(rs.reduce((s,r)=>s+n(r.saldo_carteira),0))}</td><td class="num">${R(rs.reduce((s,r)=>s+n(r.saldo_pendente),0))}</td>
+        <td class="num"><b>${R(t)}</b></td><td class="num">${ant==null?'—':(t-ant>=0?'+':'')+R(t-ant)}</td></tr>`; }).join('')}</tbody>` : '';
+}
+document.getElementById('giro-salvar').onclick = async ()=>{
+  const dt = document.getElementById('giro-dt').value;
+  if (!dt) return toast('Informe a data.','er');
+  const num = id => { const v = document.getElementById(id).value; return v==='' ? null : parseFloat(v); };
+  const linhas = cache.lojas.map(l=>({ loja_id:l.id, data_ref:dt,
+    saldo_banco:num(`gi-${l.id}-saldo_banco`), saldo_carteira:num(`gi-${l.id}-saldo_carteira`),
+    saldo_pendente:num(`gi-${l.id}-saldo_pendente`), credito_ads:num(`gi-${l.id}-credito_ads`) }));
+  const { error } = await sb.from('ec_capital_giro').upsert(linhas, {onConflict:'loja_id,data_ref'});
+  if (error) return toast('Erro: '+error.message,'er');
+  toast('Saldos salvos.','ok'); renderGiro();
+};
 
 // ── ESTADOS ────────────────────────────────────────────────────
 function renderUF(){
