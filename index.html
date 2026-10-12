@@ -214,6 +214,38 @@ input[type=checkbox]{width:auto}
   overflow:auto;white-space:pre-wrap;color:var(--ink-2)}
 .log .ok{color:var(--pos)}
 
+/* ── CASCATA E PONTO DE EQUILÍBRIO ─────────────────────────── */
+.cx-lin{display:grid;grid-template-columns:minmax(150px,190px) 1fr 122px 52px;gap:12px;align-items:center;padding:9px 2px;border-bottom:1px solid var(--line)}
+.cx-lin:last-child{border-bottom:none}
+.cx-nm{font-weight:600;color:var(--ink);font-size:13px}
+.cx-trilho{position:relative;height:22px;background:var(--surface-2);border-radius:3px}
+.cx-trilho span{position:absolute;top:0;bottom:0;border-radius:3px;background:var(--accent)}
+.cx-lin.sai .cx-trilho span{background:var(--neg);opacity:.72}
+.cx-lin.fica .cx-trilho span{background:var(--pos)}
+.cx-lin.neg .cx-trilho span{background:var(--neg)}
+.cx-lin.fica,.cx-lin.neg{border-top:2px solid var(--line-2)}
+.cx-lin.fica .cx-nm,.cx-lin.fica .cx-vl{color:var(--pos);font-weight:700;font-size:15px}
+.cx-lin.neg .cx-nm,.cx-lin.neg .cx-vl{color:var(--neg);font-weight:700;font-size:15px}
+.cx-vl{text-align:right;font-variant-numeric:tabular-nums;font-weight:600;color:var(--ink);font-size:13px;white-space:nowrap}
+.cx-pc{text-align:right;color:var(--ink-3);font-size:12px;font-variant-numeric:tabular-nums}
+#cx-hint .pos{color:var(--pos)} #cx-hint .neg{color:var(--neg)}
+.eq-big{font-size:30px;font-weight:700;letter-spacing:-.6px;line-height:1.1;margin:2px 0 4px}
+.eq-big.ok{color:var(--pos)} .eq-big.ruim{color:var(--neg)}
+.eq-sub{color:var(--ink-2);font-size:13px;line-height:1.45}
+.eq-trilho{position:relative;height:30px;background:var(--surface-2);border:1px solid var(--line);border-radius:4px;margin:34px 0 36px}
+.eq-trilho .fill{position:absolute;left:0;top:0;bottom:0;border-radius:3px}
+.eq-trilho .fill.ok{background:var(--pos)} .eq-trilho .fill.ruim{background:var(--neg)}
+.eq-trilho .proj{position:absolute;top:2px;bottom:2px;border:2px dashed var(--ink-3);border-left:none;border-radius:0 3px 3px 0}
+.eq-mk{position:absolute;top:-9px;bottom:-9px;width:0;border-left:3px solid var(--sinal)}
+.eq-mk b{position:absolute;top:-21px;left:0;transform:translateX(-50%);font-size:12px;white-space:nowrap;color:var(--sinal);font-family:"Barlow Condensed",sans-serif;text-transform:uppercase;letter-spacing:1px}
+.eq-val{position:absolute;bottom:-23px;font-size:11.5px;color:var(--ink-2);transform:translateX(-100%);white-space:nowrap;font-weight:600}
+.eq-val.proj-l{color:var(--ink-3);font-weight:500}
+.eq-det{display:grid;gap:7px;font-size:13px;color:var(--ink-2)}
+.eq-det div{display:flex;justify-content:space-between;gap:10px;border-bottom:1px dashed var(--line);padding-bottom:6px}
+.eq-det b{color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+.eq-nota{margin-top:10px;font-size:11.5px;color:var(--warn)}
+@media (max-width:700px){.cx-lin{grid-template-columns:1fr 100px 44px}.cx-trilho{grid-column:1/-1;order:5}}
+
 /* ── GRÁFICOS E BARRAS ─────────────────────────────────────── */
 .chart{height:290px;position:relative}
 .barras{display:block}
@@ -325,8 +357,8 @@ input[type=checkbox]{width:auto}
   <div class="page on" id="p-dash">
     <div class="sec"><h2>Indicadores do período</h2><div class="kpis" id="k-dash"></div></div>
     <div class="grid2">
-      <div class="sec"><h2>Faturamento por mês</h2><div class="chart"><canvas id="c-fat"></canvas></div></div>
-      <div class="sec"><h2>EBITDA por mês</h2><div class="chart"><canvas id="c-ebitda"></canvas></div></div>
+      <div class="sec"><h2>Onde foi o dinheiro <span class="hint" id="cx-hint"></span></h2><div id="c-cascata"></div></div>
+      <div class="sec"><h2>Pedidos × ponto de equilíbrio</h2><div id="c-equil"></div></div>
     </div>
     <div class="sec"><h2>Por loja no período</h2><div class="twrap"><table id="t-lojas"></table></div></div>
   </div>
@@ -977,8 +1009,7 @@ function renderDash(){
   ).join('');
 
   const meses = [...new Set(cache.dre.map(r=>r.competencia))].sort();
-  linha('c-fat','Faturamento', meses, meses.map(m=>soma(cache.dre.filter(r=>r.competencia===m),'receita_bruta')), '#1F6F78');
-  linha('c-ebitda','EBITDA', meses, meses.map(m=>soma(cache.dre.filter(r=>r.competencia===m),'ebitda')), '#E8622A');
+  renderCascata(); renderEquil(); carregarAnterior();
 
   const porLoja = {};
   for (const r of cache.dre){
@@ -1004,6 +1035,130 @@ function renderDash(){
       <td class="num">${R(ls.reduce((s,x)=>s+x.ebitda,0))}</td>
       <td class="num">${totR?P(ls.reduce((s,x)=>s+x.ebitda,0)/totR*100):'—'}</td></tr></tfoot>`
     : '<tbody><tr><td class="vazio">Sem dados no período</td></tr></tbody>';
+}
+
+// ── CASCATA E PONTO DE EQUILÍBRIO ──────────────────────────────
+function mesesEntre(de, ate){
+  const [a1,m1] = de.split('-').map(Number), [a2,m2] = ate.split('-').map(Number);
+  return (a2-a1)*12 + (m2-m1) + 1;
+}
+function addMes(c, n){
+  let [a,m] = c.split('-').map(Number); m += n;
+  while (m < 1){ m += 12; a--; } while (m > 12){ m -= 12; a++; }
+  return a + '-' + String(m).padStart(2,'0') + '-01';
+}
+function compHoje(){
+  const h = new Date();
+  return h.getFullYear() + '-' + String(h.getMonth()+1).padStart(2,'0') + '-01';
+}
+async function carregarAnterior(){
+  const chave = filtro.de + '|' + filtro.ate + '|' + filtro.loja;
+  if (cache.prevChave === chave) return;
+  cache.prevChave = chave; cache.drePrev = null;
+  const n = mesesEntre(filtro.de, filtro.ate);
+  const de = addMes(filtro.de, -n), ate = addMes(filtro.de, -1);
+  let q = sb.from('ec_vw_dre_mes').select('*').gte('competencia', de).lte('competencia', ate);
+  if (filtro.loja) q = q.eq('loja_id', filtro.loja);
+  const r = await q;
+  if (cache.prevChave !== chave) return;
+  cache.drePrev = r.data || [];
+  cache.prevMeses = n;
+  cache.prevLabel = n === 1 ? compLabel(de) : compLabel(de) + ' a ' + compLabel(ate);
+  renderCascata(); renderEquil();
+}
+
+function renderCascata(){
+  const el = document.getElementById('c-cascata'); if (!el) return;
+  const d = cache.dre;
+  const rec = soma(d,'receita_bruta'), rl = soma(d,'receita_liquida'), cpv = soma(d,'cpv'),
+        mid = soma(d,'midia'), dop = soma(d,'despesas_operacionais'), ebi = soma(d,'ebitda');
+  const hint = document.getElementById('cx-hint');
+  if (!rec){ el.innerHTML = '<div class="vazio">Sem vendas no período</div>'; if (hint) hint.textContent = ''; return; }
+  const linhas = [
+    ['Receita bruta', rec, 'base'],
+    ['Taxas Shopee e impostos', rec - rl, 'sai'],
+    ['Custo de produção (CPV)', cpv, 'sai'],
+    ['Mídia (Shopee Ads)', mid, 'sai'],
+    ['Despesas operacionais', dop, 'sai'],
+    ['EBITDA', ebi, ebi >= 0 ? 'fica' : 'neg'],
+  ];
+  let corrente = rec;
+  el.innerHTML = linhas.map(([nm, v, tipo]) => {
+    let ini = 0, larg = Math.abs(v);
+    if (tipo === 'sai'){ corrente -= v; ini = Math.max(0, corrente); larg = Math.min(v, corrente + v); }
+    const esq = Math.min(100, ini / rec * 100), w = Math.max(0.4, Math.min(100 - esq, larg / rec * 100));
+    return `<div class="cx-lin ${tipo}"><div class="cx-nm">${nm}</div>
+      <div class="cx-trilho"><span style="left:${esq}%;width:${w}%"></span></div>
+      <div class="cx-vl">${tipo === 'sai' ? '− ' : ''}${R(Math.abs(v))}</div>
+      <div class="cx-pc">${tipo === 'base' ? '100%' : P(Math.abs(v) / rec * 100)}</div></div>`;
+  }).join('');
+  if (hint){
+    const p = cache.drePrev, pr = p ? soma(p,'receita_bruta') : 0;
+    if (filtro.ate === compHoje()){
+      hint.innerHTML = `<b class="neg">mês em aberto</b> · despesas lançadas até agora — o EBITDA ainda vai cair`;
+    } else if (p && pr){
+      const mAt = ebi / rec * 100, mAn = soma(p,'ebitda') / pr * 100, dif = mAt - mAn;
+      hint.innerHTML = `margem ${P(mAt)} · <b class="${dif >= 0 ? 'pos' : 'neg'}">${dif >= 0 ? '▲' : '▼'} ${Math.abs(dif).toFixed(1).replace('.',',')} pp</b> vs ${cache.prevLabel}`;
+    } else hint.textContent = 'margem EBITDA ' + P(ebi / rec * 100);
+  }
+}
+
+function renderEquil(){
+  const el = document.getElementById('c-equil'); if (!el) return;
+  const d = cache.dre;
+  const ped = soma(d,'pedidos_validos'), lb = soma(d,'lucro_bruto'), mid = soma(d,'midia');
+  let dop = soma(d,'despesas_operacionais');
+  if (!ped){ el.innerHTML = '<div class="vazio">Sem pedidos no período</div>'; return; }
+  const contrib = (lb - mid) / ped;
+  const aberto = filtro.de === compHoje() && filtro.ate === compHoje();
+  let nota = '';
+  if (aberto && cache.drePrev && cache.drePrev.length){
+    const base = soma(cache.drePrev,'despesas_operacionais') / (cache.prevMeses || 1);
+    if (base > dop){
+      nota = `Mês em aberto: as despesas do mês ainda não estão todas lançadas, então o equilíbrio usa as despesas de ${cache.prevLabel} (${R(base)}).`;
+      dop = base;
+    }
+  }
+  if (contrib <= 0){
+    el.innerHTML = `<div class="eq-big ruim">Cada pedido está dando prejuízo</div>
+      <div class="eq-sub">Depois de produção, taxas e mídia sobra ${R(contrib)} por pedido — não existe ponto de equilíbrio com essa margem.</div>`;
+    return;
+  }
+  const eq = Math.ceil(dop / contrib);
+  const h = new Date();
+  const diasMes = new Date(h.getFullYear(), h.getMonth() + 1, 0).getDate();
+  const decorr = Math.max(1, h.getDate() - 1 + h.getHours() / 24);
+  const proj = aberto ? Math.round(ped / decorr * diasMes) : null;
+  const ok = ped >= eq;
+  const topo = Math.max(ped, eq, proj || 0) * 1.12;
+  const pc = x => Math.min(100, x / topo * 100);
+  let big, sub;
+  if (ok){
+    big = `<div class="eq-big ok">✔ ${X(ped / eq)} o equilíbrio</div>`;
+    sub = `${N(ped)} pedidos — ${N(ped - eq)} acima dos ${N(eq)} que pagam a operação.`;
+  } else if (aberto){
+    const rest = Math.max(1, diasMes - h.getDate() + 1), falta = eq - ped;
+    big = `<div class="eq-big ${proj >= eq ? 'ok' : 'ruim'}">Faltam ${N(falta)} pedidos</div>`;
+    sub = `para empatar · ${(falta / rest).toFixed(1).replace('.',',')} por dia até o fim do mês (ritmo atual: ${(ped / decorr).toFixed(1).replace('.',',')} por dia).`;
+  } else {
+    big = `<div class="eq-big ruim">✖ ${N(eq - ped)} pedidos abaixo</div>`;
+    sub = `${N(ped)} pedidos contra ${N(eq)} necessários para pagar a operação.`;
+  }
+  el.innerHTML = `${big}<div class="eq-sub">${sub}</div>
+    <div class="eq-trilho">
+      ${proj && proj > ped ? `<div class="proj" style="left:${pc(ped)}%;width:${pc(proj) - pc(ped)}%"></div>` : ''}
+      <div class="fill ${ok ? 'ok' : 'ruim'}" style="width:${pc(ped)}%"></div>
+      <div class="eq-mk" style="left:${pc(eq)}%"><b>equilíbrio ${N(eq)}</b></div>
+      <span class="eq-val" style="left:${pc(ped)}%">${N(ped)} feitos</span>
+      ${proj && proj > ped ? `<span class="eq-val proj-l" style="left:${pc(proj)}%">projeção ${N(proj)}</span>` : ''}
+    </div>
+    <div class="eq-det">
+      <div><span>Cada pedido deixa (depois de produção, taxas e mídia)</span><b>${R(contrib)}</b></div>
+      <div><span>Despesas operacionais a cobrir</span><b>${R(dop)}</b></div>
+      <div><span>Pedidos para empatar (${R(dop)} ÷ ${R(contrib)})</span><b>${N(eq)}</b></div>
+      ${proj ? `<div><span>Projeção de fechamento no ritmo atual</span><b>${N(proj)} pedidos · ${X(proj / eq)}</b></div>` : ''}
+    </div>
+    ${nota ? `<div class="eq-nota">${nota}</div>` : ''}`;
 }
 
 function linha(id, rotulo, labels, dados, cor){
